@@ -12,7 +12,6 @@ Steps 1–4 of the roadmap are done:
 - [x] Backend API (`backend/main.py`)
 - [x] Upload + header-preview UI (`frontend/`) — validated against a real Cogistics export
 - [ ] Preset picker + column-mapping UI (step 5 — next)
-- [ ] Preset picker + column-mapping UI (step 5)
 - [ ] Preset management UI (step 6)
 - [ ] Validation against real sheets (step 7)
 - [ ] Deploy (step 8)
