@@ -1,7 +1,7 @@
 # Core engine (used today)
 openpyxl==3.1.5
 reportlab==4.4.10
-Pillow==12.1.1
+Pillow>=10.4,<12
 pydantic>=2.0,<3.0
 
 # Backend API (step 3 — added when we build main.py)
