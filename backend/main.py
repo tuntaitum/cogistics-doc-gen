@@ -65,7 +65,7 @@ async def upload_file(file: UploadFile = File(...), header_row: int = Form(2)):
         f.write(await file.read())
 
     try:
-        headers = engine.detect_headers(str(dest), header_row=header_row)
+        headers, preview_rows = engine.preview_excel(str(dest), header_row=header_row)
     except Exception as e:
         dest.unlink(missing_ok=True)
         raise HTTPException(400, f"Could not read file: {e}")
@@ -74,7 +74,12 @@ async def upload_file(file: UploadFile = File(...), header_row: int = Form(2)):
         dest.unlink(missing_ok=True)
         raise HTTPException(400, f"No headers found in row {header_row}. Try a different header row.")
 
-    return {"session_id": session_id, "filename": file.filename, "headers": headers}
+    return {
+        "session_id": session_id,
+        "filename": file.filename,
+        "headers": headers,
+        "preview_rows": preview_rows,
+    }
 
 
 # ─────────────────────────────────────────────

@@ -6,11 +6,12 @@ See [`docs/PROJECT.md`](docs/PROJECT.md) for the full background, problem statem
 
 ## Status
 
-Steps 1–3 of the roadmap are done and verified:
+Steps 1–4 of the roadmap are done:
 - [x] Template config schema (`backend/schemas.py`)
 - [x] Generalized, config-driven engine (`backend/engine.py`)
 - [x] Backend API (`backend/main.py`)
-- [ ] Upload + header-preview UI (step 4 — in progress)
+- [x] Upload + header-preview UI (`frontend/`) — validated against a real Cogistics export
+- [ ] Preset picker + column-mapping UI (step 5 — next)
 - [ ] Preset picker + column-mapping UI (step 5)
 - [ ] Preset management UI (step 6)
 - [ ] Validation against real sheets (step 7)
@@ -62,6 +63,19 @@ Endpoints (all under `/api`):
 | GET | `/download/{session_id}` | Download the generated PDF |
 
 Interactive docs (Swagger UI) are auto-served at `http://127.0.0.1:8000/docs` once the server is running — useful for testing endpoints by hand before the frontend exists.
+
+## Running the frontend
+
+The frontend is plain HTML/CSS/JS — no build step. With the backend running (see above):
+
+```bash
+cd frontend
+python3 -m http.server 8080
+```
+
+Then open `http://127.0.0.1:8080`. It talks to the backend at `http://127.0.0.1:8000` by default; override by setting `window.CODOCS_API_BASE` before `app.js` loads if you're running the backend elsewhere.
+
+Currently implemented: upload an `.xlsx`, detect its headers and preview the first few rows, and retry with a different header row if it looks wrong. The "Continue" button is intentionally disabled — document type selection (step 5) isn't built yet.
 
 ## How templates work
 

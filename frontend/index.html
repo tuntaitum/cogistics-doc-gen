@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CoDocuments</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="app-header">
+  <div class="app-header__inner">
+    <span class="app-header__mark">CoDocuments</span>
+    <span class="app-header__tagline">Cogistics document generator</span>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <ol class="steps">
+    <li class="steps__item is-active" data-step="1">Upload file</li>
+    <li class="steps__item" data-step="2">Choose document type</li>
+    <li class="steps__item" data-step="3">Generate</li>
+  </ol>
+
+  <section class="panel" id="panel-upload">
+    <h1 class="panel__title">Upload your spreadsheet</h1>
+    <p class="panel__hint">An .xlsx file with a header row and a select column marking which rows to include.</p>
+
+    <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload an Excel file">
+      <input type="file" id="file-input" accept=".xlsx" hidden>
+      <div class="dropzone__icon" aria-hidden="true">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+          <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+          <path d="M12 3v12"/>
+          <path d="M7 8l5-5 5 5"/>
+        </svg>
+      </div>
+      <p class="dropzone__text"><strong>Drop your .xlsx file here</strong> or click to browse</p>
+      <p class="dropzone__filename" id="dropzone-filename"></p>
+    </div>
+
+    <div class="field-row">
+      <label for="header-row" class="field-row__label">
+        Header row
+        <span class="field-row__hint">Which row has your column names? (usually row 2)</span>
+      </label>
+      <input type="number" id="header-row" value="2" min="1" class="field-row__input">
+    </div>
+
+    <button class="btn btn--primary" id="detect-btn" disabled>Detect columns</button>
+
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+  </section>
+
+  <section class="panel" id="panel-headers" hidden>
+    <h2 class="panel__title panel__title--sm">Columns found</h2>
+    <p class="panel__hint" id="headers-summary"></p>
+    <ul class="chip-list" id="header-chips"></ul>
+
+    <div class="preview-table-wrap" id="preview-table-wrap" hidden>
+      <p class="preview-table-label">First few rows, for a sanity check</p>
+      <div class="preview-table-scroll">
+        <table class="preview-table" id="preview-table"></table>
+      </div>
+    </div>
+
+    <div class="panel__actions">
+      <button class="btn btn--ghost" id="wrong-row-btn">These don't look right — try a different row</button>
+      <button class="btn btn--primary" id="continue-btn" disabled title="Document type selection isn't built yet">
+        Continue → choose document type
+      </button>
+    </div>
+  </section>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -53,6 +53,36 @@ def detect_headers(path: str, header_row: int = 2) -> list[str]:
     return headers
 
 
+def preview_excel(path: str, header_row: int = 2, preview_row_count: int = 3):
+    """
+    Return (headers, preview_rows) for the upload/header-preview UI step.
+    preview_rows is a list of {header: value} dicts for the first few rows
+    after the header row, so a user can visually confirm they picked the
+    right file/header row before moving on to column mapping.
+    """
+    wb = openpyxl.load_workbook(path)
+    ws = wb.active
+
+    header_cells = next(ws.iter_rows(min_row=header_row, max_row=header_row))
+    # Keep (column index, header text) pairs so preview rows line up correctly
+    # even when there are blank/skipped columns in between.
+    col_positions = [(i, str(c.value).strip()) for i, c in enumerate(header_cells)
+                      if c.value not in (None, "")]
+    headers = [h for _, h in col_positions]
+
+    preview_rows = []
+    start = header_row + 1
+    for row in ws.iter_rows(min_row=start, max_row=start + preview_row_count - 1, values_only=True):
+        row_dict = {}
+        for idx, h in col_positions:
+            val = row[idx] if row and idx < len(row) else None
+            row_dict[h] = "" if val is None else str(val)
+        preview_rows.append(row_dict)
+
+    wb.close()
+    return headers, preview_rows
+
+
 # ─────────────────────────────────────────────
 #  FLOATING IMAGE EXTRACTOR (unchanged logic from the original script,
 #  just parameterized on which Excel columns to skip and which rows
