@@ -1,0 +1,92 @@
+"""
+test_engine.py — proves the generalized engine works for all three
+current use cases before we build any API/UI on top of it.
+"""
+
+import io
+import json
+import os
+import openpyxl
+from openpyxl.drawing.image import Image as XLImage
+from PIL import Image as PILImage
+
+from schemas import DocumentConfig
+import engine
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ASSETS = os.path.join(HERE, "assets")
+OUT = os.path.join(HERE, "output")
+os.makedirs(OUT, exist_ok=True)
+
+
+def make_dummy_image_bytes(color):
+    img = PILImage.new("RGB", (80, 80), color)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return buf
+
+
+def build_client_catalog_xlsx(path):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["-- title row --"])
+    ws.append(["Select", "Product Name", "Dimension (Spec)", "Supply Advantage", "Price Range (THB/kg)"])
+    rows = [
+        ["Yes", "Frozen Salmon Fillet", "200g x 20 pcs", "Year-round supply, cold chain verified", "180-220"],
+        ["Yes", "Chicken Breast", "1kg x 10 pcs", "Local sourcing, 48hr lead time", "120-150"],
+        ["No", "Excluded Item", "n/a", "n/a", "n/a"],
+        ["Yes", "Tiger Prawns", "500g x 12 pcs", "", "350-400"],
+    ]
+    for r in rows:
+        ws.append(r)
+
+    for row_idx, color in [(3, (200, 80, 80)), (4, (80, 160, 90))]:
+        img = XLImage(make_dummy_image_bytes(color))
+        img.width, img.height = 80, 80
+        ws.add_image(img, f"A{row_idx}")
+
+    wb.save(path)
+
+
+def build_quotation_xlsx(path):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["-- title row --"])
+    ws.append(["Include", "Item Name", "Quantity", "Unit Price", "Remarks"])
+    rows = [
+        ["Yes", "Cardboard Box (M)", "500", "12.50", "Bulk discount applied"],
+        ["Yes", "Pallet Wrap", "50", "45.00", ""],
+        ["No", "Skip Me", "1", "1", ""],
+    ]
+    for r in rows:
+        ws.append(r)
+    wb.save(path)
+
+
+def run_case(name, xlsx_builder, preset_file):
+    print(f"\n=== {name} ===")
+    xlsx_path = os.path.join(OUT, f"{name}_input.xlsx")
+    xlsx_builder(xlsx_path)
+
+    with open(os.path.join(HERE, "presets", preset_file)) as f:
+        config = DocumentConfig(**json.load(f))
+
+    headers = engine.detect_headers(xlsx_path, config.header_row)
+    print(f"Detected headers: {headers}")
+
+    items = engine.read_excel(xlsx_path, config)
+    print(f"Items included: {len(items)}")
+    for it in items:
+        print(f"  {it}")
+
+    out_pdf = os.path.join(OUT, f"{name}.pdf")
+    engine.generate_pdf(items, config, out_pdf, ASSETS)
+    size_kb = os.path.getsize(out_pdf) / 1024
+    print(f"PDF generated: {out_pdf} ({size_kb:.1f} KB)")
+
+
+if __name__ == "__main__":
+    run_case("client_catalog", build_client_catalog_xlsx, "client_catalog.json")
+    run_case("quotation_sheet", build_quotation_xlsx, "quotation_sheet.json")
+    print("\nAll cases passed.")

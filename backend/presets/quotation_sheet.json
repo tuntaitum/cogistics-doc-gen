@@ -1,0 +1,31 @@
+{
+  "id": "quotation_sheet",
+  "name": "Quotation Sheet",
+  "document_title": "Price Quotation",
+  "intro_text_template": "This quotation covers {count} item(s).",
+  "header_row": 2,
+  "data_start_row": 3,
+  "select_column": "Include",
+  "select_value": "yes",
+  "image_skip_columns": [],
+  "columns": [
+    { "key": "name", "label": "Item", "type": "text", "source_header": "Item Name", "width_mode": "flex", "flex_weight": 1.4, "emphasis": true },
+    { "key": "qty", "label": "Quantity", "type": "text", "source_header": "Quantity", "width_mm": 25, "align": "center" },
+    { "key": "price", "label": "Unit Price (THB)", "type": "text", "source_header": "Unit Price", "width_mm": 30, "align": "center" },
+    { "key": "remarks", "label": "Remarks", "type": "text", "source_header": "Remarks", "width_mode": "flex", "flex_weight": 1.0, "optional": true }
+  ],
+  "footer_blocks": [
+    { "type": "signature", "labels": ["Prepared by", "Approved by"] }
+  ],
+  "brand": {
+    "company_name": "COGISTICS",
+    "tagline": "The One Stop Cold Chain Solution",
+    "primary": "#1A3C5E",
+    "accent": "#7C7C7C",
+    "light_bg": "#F5F7FA",
+    "text_dark": "#1C1C1C",
+    "text_mid": "#555555",
+    "banner_left": "cogistics header banner left.png",
+    "banner_right": "cogistics header banner right.png"
+  }
+}

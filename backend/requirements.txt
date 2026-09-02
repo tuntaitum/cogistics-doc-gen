@@ -1,0 +1,10 @@
+# Core engine (used today)
+openpyxl==3.1.5
+reportlab==4.4.10
+Pillow==12.1.1
+pydantic>=2.0,<3.0
+
+# Backend API (step 3 — added when we build main.py)
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9

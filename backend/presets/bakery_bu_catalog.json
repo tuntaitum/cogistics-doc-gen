@@ -1,0 +1,30 @@
+{
+  "id": "bakery_bu_catalog",
+  "name": "Bakery BU Catalog",
+  "document_title": "Bakery Ingredient Suggestions Catalog",
+  "intro_text_template": "This catalog lists {count} bakery item(s) with specifications.",
+  "header_row": 2,
+  "data_start_row": 3,
+  "select_column": "Include",
+  "select_value": "yes",
+  "image_skip_columns": [5],
+  "columns": [
+    { "key": "photo", "label": "Photo", "type": "image", "width_mm": 32 },
+    { "key": "name", "label": "Item Name", "type": "text", "source_header": "Item Name", "width_mode": "flex", "flex_weight": 1.0, "emphasis": true },
+    { "key": "dim", "label": "Pack Size", "type": "text", "source_header": "Pack Size", "width_mm": 25 },
+    { "key": "shelf_life", "label": "Shelf Life", "type": "text", "source_header": "Shelf Life", "width_mode": "flex", "flex_weight": 0.8, "optional": true },
+    { "key": "price", "label": "Price (THB/unit)", "type": "text", "source_header": "Unit Price", "width_mm": 30, "optional": true, "align": "center" }
+  ],
+  "footer_blocks": [],
+  "brand": {
+    "company_name": "COGISTICS",
+    "tagline": "The One Stop Cold Chain Solution",
+    "primary": "#1A3C5E",
+    "accent": "#7C7C7C",
+    "light_bg": "#F5F7FA",
+    "text_dark": "#1C1C1C",
+    "text_mid": "#555555",
+    "banner_left": "cogistics header banner left.png",
+    "banner_right": "cogistics header banner right.png"
+  }
+}
