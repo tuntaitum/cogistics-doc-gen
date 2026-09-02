@@ -157,6 +157,16 @@ def generate(session_id: str = Form(...), config_json: str = Form(...)):
     except (ValidationError, json.JSONDecodeError) as e:
         raise HTTPException(400, f"Invalid config: {e}")
 
+    unmapped_required = [
+        c.label for c in config.columns
+        if c.type == "text" and not c.optional and not c.source_header
+    ]
+    if unmapped_required:
+        raise HTTPException(
+            400,
+            f"These required fields aren't mapped to a column: {', '.join(unmapped_required)}"
+        )
+
     try:
         items = engine.read_excel(str(xlsx_path), config)
     except ValueError as e:

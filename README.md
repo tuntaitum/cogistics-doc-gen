@@ -6,13 +6,13 @@ See [`docs/PROJECT.md`](docs/PROJECT.md) for the full background, problem statem
 
 ## Status
 
-Steps 1–4 of the roadmap are done:
+Steps 1–5 of the roadmap are done:
 - [x] Template config schema (`backend/schemas.py`)
 - [x] Generalized, config-driven engine (`backend/engine.py`)
 - [x] Backend API (`backend/main.py`)
 - [x] Upload + header-preview UI (`frontend/`) — validated against a real Cogistics export
-- [ ] Preset picker + column-mapping UI (step 5 — next)
-- [ ] Preset management UI (step 6)
+- [x] Preset picker + column-mapping UI (`frontend/`) — full upload-to-download flow works end to end
+- [ ] Preset management UI (step 6 — next)
 - [ ] Validation against real sheets (step 7)
 - [ ] Deploy (step 8)
 

@@ -276,3 +276,116 @@ body {
 @media (min-width: 480px) {
   .field-row { flex-direction: row; }
 }
+
+/* Preset picker */
+.preset-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.preset-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.preset-card:hover {
+  border-color: var(--navy);
+  background: #FAFBFC;
+}
+.preset-card.is-selected {
+  border-color: var(--navy);
+  background: #F0F4F8;
+}
+.preset-card__name {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text-dark);
+  margin: 0 0 2px;
+}
+.preset-card__meta {
+  font-size: 12.5px;
+  color: var(--text-mid);
+  margin: 0;
+}
+
+/* Column mapping */
+.mapping-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.mapping-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.mapping-row__label {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-dark);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.mapping-row__optional-tag {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-mid);
+  background: #EEF2F6;
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+.mapping-row__select {
+  min-width: 180px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13.5px;
+  background: #fff;
+}
+.mapping-row__select:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 1px;
+}
+.mapping-row__select.is-unmapped {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.mapping-row--image .mapping-row__note {
+  font-size: 12.5px;
+  color: var(--text-mid);
+  font-style: italic;
+}
+
+/* Generate result */
+.status.is-success {
+  padding: 12px 14px;
+  border-radius: 7px;
+  background: var(--success-bg);
+  color: var(--success);
+}
+.result {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+.result__text {
+  font-size: 13.5px;
+  color: var(--text-mid);
+  margin: 0 0 12px;
+}

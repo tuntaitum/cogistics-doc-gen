@@ -67,9 +67,31 @@
 
     <div class="panel__actions">
       <button class="btn btn--ghost" id="wrong-row-btn">These don't look right — try a different row</button>
-      <button class="btn btn--primary" id="continue-btn" disabled title="Document type selection isn't built yet">
+      <button class="btn btn--primary" id="continue-btn">
         Continue → choose document type
       </button>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-preset" hidden>
+    <h2 class="panel__title panel__title--sm">Choose a document type</h2>
+    <p class="panel__hint">Pick the template that matches what you're making.</p>
+    <ul class="preset-list" id="preset-list"></ul>
+    <div class="status" id="preset-status" role="status" aria-live="polite"></div>
+  </section>
+
+  <section class="panel" id="panel-mapping" hidden>
+    <h2 class="panel__title panel__title--sm">Map your columns</h2>
+    <p class="panel__hint" id="mapping-hint"></p>
+
+    <div class="mapping-list" id="mapping-list"></div>
+
+    <button class="btn btn--primary" id="generate-btn" disabled>Generate PDF</button>
+    <div class="status" id="generate-status" role="status" aria-live="polite"></div>
+
+    <div class="result" id="result-panel" hidden>
+      <p class="result__text" id="result-text"></p>
+      <a class="btn btn--primary" id="download-link" href="#" download>Download PDF</a>
     </div>
   </section>
 
