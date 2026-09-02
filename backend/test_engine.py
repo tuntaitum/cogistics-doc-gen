@@ -6,6 +6,8 @@ current use cases before we build any API/UI on top of it.
 import io
 import json
 import os
+import re
+import zipfile
 import openpyxl
 from openpyxl.drawing.image import Image as XLImage
 from PIL import Image as PILImage
@@ -86,7 +88,42 @@ def run_case(name, xlsx_builder, preset_file):
     print(f"PDF generated: {out_pdf} ({size_kb:.1f} KB)")
 
 
+def test_truncated_dimension_metadata():
+    """
+    Regression test: files exported from Google Sheets/Lark can have a
+    <dimension> tag in the sheet XML that under-reports the real column
+    range. detect_headers() must not silently drop columns because of this
+    (found via a real Cogistics export — see engine.py detect_headers docstring).
+    """
+    print("\n=== truncated_dimension_metadata (regression) ===")
+    src = os.path.join(OUT, "dim_regression_source.xlsx")
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["title"])
+    ws.append(["Select", "Product Name", "Dimension (Spec)", "Supply Advantage", "Price Range (THB/kg)"])
+    ws.append(["Yes", "Item A", "10x10", "adv", "100"])
+    wb.save(src)
+
+    with zipfile.ZipFile(src, "r") as z:
+        sheet_xml = z.read("xl/worksheets/sheet1.xml").decode()
+    bad_xml = re.sub(r'<dimension ref="[^"]*"/>', '<dimension ref="A1:A3"/>', sheet_xml)
+
+    corrupted = os.path.join(OUT, "dim_regression_corrupted.xlsx")
+    with zipfile.ZipFile(src, "r") as zin, zipfile.ZipFile(corrupted, "w") as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename == "xl/worksheets/sheet1.xml":
+                data = bad_xml.encode()
+            zout.writestr(item, data)
+
+    headers = engine.detect_headers(corrupted, header_row=2)
+    print(f"Detected headers: {headers}")
+    assert len(headers) == 5, f"Expected 5 headers, got {len(headers)}: {headers}"
+    print("PASS")
+
+
 if __name__ == "__main__":
     run_case("client_catalog", build_client_catalog_xlsx, "client_catalog.json")
     run_case("quotation_sheet", build_quotation_xlsx, "quotation_sheet.json")
+    test_truncated_dimension_metadata()
     print("\nAll cases passed.")

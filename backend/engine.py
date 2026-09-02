@@ -37,8 +37,15 @@ PX_PER_EMU = 1 / 9525
 # ─────────────────────────────────────────────
 
 def detect_headers(path: str, header_row: int = 2) -> list[str]:
-    """Return the non-empty header values found in the given row."""
-    wb = openpyxl.load_workbook(path, read_only=True)
+    """Return the non-empty header values found in the given row.
+
+    Deliberately NOT using read_only=True here: read-only mode trusts the
+    sheet's stored dimension metadata to know how many columns exist, and
+    files exported from Google Sheets/Lark often have that metadata wrong
+    (truncated), which silently drops real columns. Fully parsing avoids it —
+    same approach read_excel() already uses.
+    """
+    wb = openpyxl.load_workbook(path)
     ws = wb.active
     row = next(ws.iter_rows(min_row=header_row, max_row=header_row))
     headers = [str(c.value).strip() for c in row if c.value not in (None, "")]
