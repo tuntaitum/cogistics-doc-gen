@@ -6,11 +6,11 @@ See [`docs/PROJECT.md`](docs/PROJECT.md) for the full background, problem statem
 
 ## Status
 
-Steps 1–2 of the roadmap are done and verified:
+Steps 1–3 of the roadmap are done and verified:
 - [x] Template config schema (`backend/schemas.py`)
 - [x] Generalized, config-driven engine (`backend/engine.py`)
-- [ ] Backend API (step 3 — in progress)
-- [ ] Upload + header-preview UI (step 4)
+- [x] Backend API (`backend/main.py`)
+- [ ] Upload + header-preview UI (step 4 — in progress)
 - [ ] Preset picker + column-mapping UI (step 5)
 - [ ] Preset management UI (step 6)
 - [ ] Validation against real sheets (step 7)
@@ -40,6 +40,28 @@ python test_engine.py
 ```
 
 This builds dummy spreadsheets for the client catalog and quotation sheet presets, runs them through the full engine, and writes the resulting PDFs to `backend/output/`.
+
+## Running the API
+
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
+
+Endpoints (all under `/api`):
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/upload` | Upload an `.xlsx`, get back a `session_id` + detected column headers |
+| GET | `/presets` | List available templates |
+| GET | `/presets/{id}` | Fetch a full template config |
+| PUT | `/presets/{id}` | Save/update a template config |
+| DELETE | `/presets/{id}` | Delete a template |
+| POST | `/generate` | Generate a PDF from a `session_id` + config JSON |
+| GET | `/download/{session_id}` | Download the generated PDF |
+
+Interactive docs (Swagger UI) are auto-served at `http://127.0.0.1:8000/docs` once the server is running — useful for testing endpoints by hand before the frontend exists.
 
 ## How templates work
 
