@@ -31,6 +31,7 @@ PAGE_W, PAGE_H = A4
 MARGIN = 18 * mm
 THUMB_SIZE = 28 * mm
 PX_PER_EMU = 1 / 9525
+SIGNATURE_AREA_HEIGHT = 24 * mm  # reserved space above the footer bar, last page only
 
 
 # ─────────────────────────────────────────────
@@ -220,6 +221,12 @@ def make_branded_canvas(config: DocumentConfig, assets_dir: str):
     banner_left = os.path.join(assets_dir, brand.banner_left) if brand.banner_left else None
     banner_right = os.path.join(assets_dir, brand.banner_right) if brand.banner_right else None
 
+    # Signature blocks are drawn directly on the canvas (not as a flowing
+    # story element) so they can be pinned to a fixed spot near the bottom
+    # of the page and — critically — only drawn once we know this is the
+    # LAST page, which we only know at save() time (see BrandedCanvas.save).
+    signature_blocks = [b for b in config.footer_blocks if b.type == "signature"]
+
     class BrandedCanvas(pdfcanvas.Canvas):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
@@ -260,6 +267,10 @@ def make_branded_canvas(config: DocumentConfig, assets_dir: str):
             self.setFillColor(c_primary)
             self.rect(0, h - 28.5 * mm, w, 2.5 * mm, fill=1, stroke=0)
 
+            if self._pageNumber == total:
+                for block in signature_blocks:
+                    self._draw_signature_block(block.labels)
+
             self.setFillColor(c_light_bg)
             self.rect(0, 0, w, 12 * mm, fill=1, stroke=0)
             self.setFillColor(c_accent)
@@ -269,6 +280,25 @@ def make_branded_canvas(config: DocumentConfig, assets_dir: str):
             self.setFont("Helvetica", 7.5)
             self.drawString(MARGIN - 5 * mm, 4.5 * mm, f"{brand.company_name} --- {brand.tagline}")
             self.drawRightString(w - MARGIN + 5 * mm, 4.5 * mm, f"Page {self._pageNumber} of {total}")
+
+        def _draw_signature_block(self, labels):
+            w, _ = A4
+            n = len(labels)
+            if n == 0:
+                return
+            col_w = (w - 2 * MARGIN) / n
+            line_y = SIGNATURE_AREA_HEIGHT - 6 * mm
+            label_y = SIGNATURE_AREA_HEIGHT - 11 * mm
+
+            self.setFont("Helvetica", 8.5)
+            for i, label in enumerate(labels):
+                x0 = MARGIN + i * col_w
+                line_width = col_w * 0.72
+                self.setStrokeColor(c_accent)
+                self.setLineWidth(0.75)
+                self.line(x0, line_y, x0 + line_width, line_y)
+                self.setFillColor(c_mid)
+                self.drawString(x0, label_y, label)
 
     return BrandedCanvas
 
@@ -384,24 +414,17 @@ def build_table(items: list[dict], config: DocumentConfig, styles: dict,
 # ─────────────────────────────────────────────
 
 def build_footer_blocks(config: DocumentConfig, styles: dict, c_mid, c_dark):
+    """
+    Only handles 'text' blocks here — 'signature' blocks are drawn directly
+    on the canvas (see make_branded_canvas) so they can be pinned to the
+    bottom of the LAST page specifically, rather than flowing wherever the
+    table happens to end.
+    """
     flowables = []
     for block in config.footer_blocks:
         if block.type == "text" and block.text:
             flowables.append(Spacer(1, 8 * mm))
             flowables.append(Paragraph(block.text, styles["intro"]))
-        elif block.type == "signature":
-            flowables.append(Spacer(1, 16 * mm))
-            n = len(block.labels)
-            col_w = (PAGE_W - 2 * MARGIN) / n
-            line_row = ["_" * 28 for _ in block.labels]
-            label_row = [Paragraph(lbl, styles["dim_text"]) for lbl in block.labels]
-            sig_table = Table([line_row, label_row], colWidths=[col_w] * n)
-            sig_table.setStyle(TableStyle([
-                ("TOPPADDING", (0, 0), (-1, -1), 4),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-                ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-            ]))
-            flowables.append(sig_table)
     return flowables
 
 
@@ -445,10 +468,16 @@ def generate_pdf(items: list[dict], config: DocumentConfig, output_path: str, as
     styles = make_styles(c_dark, c_mid, c_white, c_primary)
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
 
+    has_signature = any(b.type == "signature" for b in config.footer_blocks)
+    # Reserve room for the signature block uniformly on every page (simpler
+    # and more predictable than a page-specific frame) so table content on
+    # the last page can never run into it, even if that page is nearly full.
+    bottom_margin = (20 + SIGNATURE_AREA_HEIGHT / mm) * mm if has_signature else 20 * mm
+
     doc = SimpleDocTemplate(
         output_path, pagesize=A4,
         leftMargin=MARGIN, rightMargin=MARGIN,
-        topMargin=30 * mm, bottomMargin=20 * mm,
+        topMargin=30 * mm, bottomMargin=bottom_margin,
         title=config.document_title,
         author=brand.company_name,
         compress=1,

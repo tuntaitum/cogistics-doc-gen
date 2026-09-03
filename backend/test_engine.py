@@ -122,8 +122,47 @@ def test_truncated_dimension_metadata():
     print("PASS")
 
 
+def test_signature_only_on_last_page():
+    """
+    Regression test: the quotation preset's signature block must appear
+    exactly once, pinned near the bottom of the LAST page — never on
+    earlier pages, and never flowing loose wherever the table happens to end.
+    """
+    print("\n=== signature_only_on_last_page (regression) ===")
+    with open(os.path.join(HERE, "presets", "quotation_sheet.json")) as f:
+        config = DocumentConfig(**json.load(f))
+
+    xlsx_path = os.path.join(OUT, "sig_regression_input.xlsx")
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["title"])
+    ws.append(["Include", "Item Name", "Quantity", "Unit Price", "Remarks"])
+    for i in range(40):  # enough rows to force multiple pages
+        ws.append(["Yes", f"Item {i+1:02d}", str(10 * (i + 1)), f"{5.5+i}", "remark"])
+    wb.save(xlsx_path)
+
+    items = engine.read_excel(xlsx_path, config)
+    out_pdf = os.path.join(OUT, "sig_regression_output.pdf")
+    engine.generate_pdf(items, config, out_pdf, ASSETS)
+
+    import subprocess
+    result = subprocess.run(["pdftotext", "-layout", out_pdf, "-"], capture_output=True, text=True)
+    pages = result.stdout.split("\x0c")  # form-feed separates pages in pdftotext output
+    pages = [p for p in pages if p.strip()]
+    print(f"Generated {len(pages)} page(s)")
+    assert len(pages) >= 2, "Test setup should force multiple pages — check row count"
+
+    occurrences = [i for i, p in enumerate(pages) if "Prepared by" in p]
+    print(f"'Prepared by' found on page index(es): {occurrences}")
+    assert occurrences == [len(pages) - 1], (
+        f"Expected signature only on the last page (index {len(pages)-1}), found on {occurrences}"
+    )
+    print("PASS")
+
+
 if __name__ == "__main__":
     run_case("client_catalog", build_client_catalog_xlsx, "client_catalog.json")
     run_case("quotation_sheet", build_quotation_xlsx, "quotation_sheet.json")
     test_truncated_dimension_metadata()
+    test_signature_only_on_last_page()
     print("\nAll cases passed.")
