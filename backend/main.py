@@ -111,11 +111,24 @@ def list_presets():
 
 @app.get("/api/presets/{preset_id}")
 def get_preset(preset_id: str):
+    """
+    Returns the FULLY NORMALIZED config (all schema defaults filled in),
+    not the raw JSON file. Preset files are often written by hand without
+    every optional field (e.g. width_mode defaults to "fixed" and is often
+    omitted) — round-tripping through DocumentConfig here means every field
+    a client reads is always actually present, so UI logic that checks
+    e.g. col["width_mode"] can't silently misfire on an absent key.
+    """
     path = _preset_path(preset_id)
     if not path.exists():
         raise HTTPException(404, "Preset not found")
     with open(path) as f:
-        return json.load(f)
+        raw = json.load(f)
+    try:
+        config = DocumentConfig(**raw)
+    except ValidationError as e:
+        raise HTTPException(500, f"Preset file is invalid: {e}")
+    return config.model_dump()
 
 
 @app.put("/api/presets/{preset_id}")
@@ -141,17 +154,7 @@ def delete_preset(preset_id: str):
 #  GENERATE
 # ─────────────────────────────────────────────
 
-@app.post("/api/generate")
-def generate(session_id: str = Form(...), config_json: str = Form(...)):
-    """
-    session_id: from /api/upload
-    config_json: the full DocumentConfig (preset + user's column mapping),
-                 serialized as a JSON string
-    """
-    xlsx_path = UPLOADS_DIR / f"{session_id}.xlsx"
-    if not xlsx_path.exists():
-        raise HTTPException(400, "Unknown session_id — please re-upload the file")
-
+def _parse_and_validate_config(config_json: str) -> DocumentConfig:
     try:
         config = DocumentConfig(**json.loads(config_json))
     except (ValidationError, json.JSONDecodeError) as e:
@@ -166,6 +169,21 @@ def generate(session_id: str = Form(...), config_json: str = Form(...)):
             400,
             f"These required fields aren't mapped to a column: {', '.join(unmapped_required)}"
         )
+    return config
+
+
+@app.post("/api/generate")
+def generate(session_id: str = Form(...), config_json: str = Form(...)):
+    """
+    session_id: from /api/upload
+    config_json: the full DocumentConfig (preset + user's column mapping),
+                 serialized as a JSON string
+    """
+    xlsx_path = UPLOADS_DIR / f"{session_id}.xlsx"
+    if not xlsx_path.exists():
+        raise HTTPException(400, "Unknown session_id — please re-upload the file")
+
+    config = _parse_and_validate_config(config_json)
 
     try:
         items = engine.read_excel(str(xlsx_path), config)
@@ -179,6 +197,33 @@ def generate(session_id: str = Form(...), config_json: str = Form(...)):
     engine.generate_pdf(items, config, str(out_path), str(ASSETS_DIR))
 
     return {"status": "generated", "download_url": f"/api/download/{session_id}", "item_count": len(items)}
+
+
+@app.post("/api/preview")
+def preview(session_id: str = Form(...), config_json: str = Form(...), row_limit: int = Form(3)):
+    """
+    Fast preview for the label/width customization UI: renders a real PDF
+    (same engine, same styling) using only the first `row_limit` matched
+    rows, and returns the PDF bytes directly for inline display — not a
+    download link. This is deliberately the same rendering path as
+    /api/generate so what the user sees IS what they'll get, not an
+    approximation of it.
+    """
+    xlsx_path = UPLOADS_DIR / f"{session_id}.xlsx"
+    if not xlsx_path.exists():
+        raise HTTPException(400, "Unknown session_id — please re-upload the file")
+
+    config = _parse_and_validate_config(config_json)
+
+    try:
+        items = engine.read_excel(str(xlsx_path), config, limit=row_limit)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    preview_path = OUTPUT_DIR / f"{session_id}_preview.pdf"
+    engine.generate_pdf(items, config, str(preview_path), str(ASSETS_DIR))
+
+    return FileResponse(preview_path, media_type="application/pdf")
 
 
 @app.get("/api/download/{session_id}")

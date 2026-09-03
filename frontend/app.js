@@ -28,10 +28,26 @@ const resultPanel = document.getElementById("result-panel");
 const resultText = document.getElementById("result-text");
 const downloadLink = document.getElementById("download-link");
 
+const customizeToggle = document.getElementById("customize-toggle");
+const customizeBody = document.getElementById("customize-body");
+const docTitleInput = document.getElementById("doc-title-input");
+const customizeList = document.getElementById("customize-list");
+const previewFrame = document.getElementById("preview-frame");
+const previewFrameStatus = document.getElementById("preview-frame-status");
+
+const WIDTH_PRESETS = { narrow: 0.6, medium: 1.0, wide: 1.5, xwide: 2.2 };
+const WIDTH_PRESETS_MM = { narrow: 20, medium: 30, wide: 45, xwide: 60 };
+const WIDTH_PRESET_LABELS = { narrow: "Narrow", medium: "Medium", wide: "Wide", xwide: "Extra wide" };
+const WIDTH_PRESET_ORDER = ["narrow", "medium", "wide", "xwide"];
+
 let selectedFile = null;
 let currentSession = null; // { session_id, filename, headers, preview_rows }
 let selectedConfig = null; // full DocumentConfig of the chosen preset
 let columnMapping = {};    // { columnKey: excelHeader }
+let customization = {};    // { columnKey: { label, widthPreset } }
+let previewDebounceTimer = null;
+let previewObjectUrl = null;
+let previewRequestSeq = 0; // guards against an in-flight preview response arriving out of order
 
 // ---- File selection ----
 
@@ -293,6 +309,7 @@ function showMappingForm(config) {
       columnMapping[col.key] = select.value;
       updateSelectValidity(select);
       updateGenerateAvailability();
+      schedulePreview();
     });
 
     updateSelectValidity(select);
@@ -307,6 +324,7 @@ function showMappingForm(config) {
   generateStatus.className = "status";
   generateStatus.textContent = "";
   updateGenerateAvailability();
+  buildCustomizeSection(config);
   panelMapping.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -331,6 +349,157 @@ function updateGenerateAvailability() {
   generateBtn.disabled = !allRequiredMapped;
 }
 
+// ---- Step 3b: customize headers & widths, with live preview ----
+
+customizeToggle.addEventListener("click", () => {
+  const isOpen = customizeToggle.getAttribute("aria-expanded") === "true";
+  customizeToggle.setAttribute("aria-expanded", String(!isOpen));
+  customizeBody.hidden = isOpen;
+  if (!isOpen) schedulePreview(true); // opening the panel: show a preview right away
+});
+
+function closestWidthPreset(col) {
+  const widthMode = col.width_mode || "fixed"; // schema default, in case an unnormalized config slips through
+  const map = widthMode === "fixed" ? WIDTH_PRESETS_MM : WIDTH_PRESETS;
+  const currentValue = widthMode === "fixed" ? col.width_mm : col.flex_weight;
+  if (currentValue == null) return "medium";
+  let best = "medium";
+  let bestDiff = Infinity;
+  for (const key of WIDTH_PRESET_ORDER) {
+    const diff = Math.abs(map[key] - currentValue);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = key;
+    }
+  }
+  return best;
+}
+
+function buildCustomizeSection(config) {
+  docTitleInput.value = config.document_title;
+  docTitleInput.oninput = () => schedulePreview();
+
+  customization = {};
+  customizeList.innerHTML = "";
+
+  config.columns.forEach((col) => {
+    customization[col.key] = {
+      label: col.label,
+      widthPreset: col.type === "text" ? closestWidthPreset(col) : null,
+    };
+
+    const row = document.createElement("div");
+    row.className = "customize-row";
+
+    const labelInput = document.createElement("input");
+    labelInput.type = "text";
+    labelInput.className = "customize-row__label-input";
+    labelInput.value = col.label;
+    labelInput.setAttribute("aria-label", `Header text for ${col.label}`);
+    labelInput.addEventListener("input", () => {
+      customization[col.key].label = labelInput.value;
+      schedulePreview();
+    });
+    row.appendChild(labelInput);
+
+    if (col.type === "text") {
+      const picker = document.createElement("div");
+      picker.className = "width-picker";
+      WIDTH_PRESET_ORDER.forEach((presetKey) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = WIDTH_PRESET_LABELS[presetKey];
+        btn.classList.toggle("is-selected", customization[col.key].widthPreset === presetKey);
+        btn.addEventListener("click", () => {
+          customization[col.key].widthPreset = presetKey;
+          picker.querySelectorAll("button").forEach((b) => b.classList.remove("is-selected"));
+          btn.classList.add("is-selected");
+          schedulePreview();
+        });
+        picker.appendChild(btn);
+      });
+      row.appendChild(picker);
+    } else {
+      const note = document.createElement("span");
+      note.className = "customize-row__original";
+      note.textContent = "Photo size is fixed";
+      row.appendChild(note);
+    }
+
+    customizeList.appendChild(row);
+  });
+}
+
+function buildFinalConfig(rowLimit) {
+  const finalConfig = JSON.parse(JSON.stringify(selectedConfig));
+  finalConfig.document_title = docTitleInput.value || selectedConfig.document_title;
+  finalConfig.columns = finalConfig.columns.map((col) => {
+    const custom = customization[col.key] || {};
+    const updated = { ...col, label: custom.label || col.label };
+    if (col.type === "image") return updated;
+
+    updated.source_header = columnMapping[col.key] || null;
+    if (custom.widthPreset) {
+      const widthMode = col.width_mode || "fixed";
+      if (widthMode === "fixed") {
+        updated.width_mm = WIDTH_PRESETS_MM[custom.widthPreset];
+      } else {
+        updated.flex_weight = WIDTH_PRESETS[custom.widthPreset];
+      }
+    }
+    return updated;
+  });
+  return finalConfig;
+}
+
+function schedulePreview(immediate) {
+  if (customizeBody.hidden) return; // no point rendering a preview nobody can see yet
+  clearTimeout(previewDebounceTimer);
+  const requiredOk = !generateBtn.disabled;
+  if (!requiredOk) {
+    previewFrameStatus.textContent = "Map required fields to see a preview";
+    return;
+  }
+  previewFrameStatus.textContent = "Updating…";
+  previewDebounceTimer = setTimeout(runPreview, immediate ? 0 : 600);
+}
+
+async function runPreview() {
+  if (!currentSession || !selectedConfig) return;
+  const mySeq = ++previewRequestSeq;
+
+  try {
+    const form = new FormData();
+    form.append("session_id", currentSession.session_id);
+    form.append("config_json", JSON.stringify(buildFinalConfig()));
+    form.append("row_limit", "3");
+
+    const res = await fetch(`${API_BASE}/api/preview`, { method: "POST", body: form });
+
+    if (mySeq !== previewRequestSeq) return; // a newer request superseded this one
+
+    if (!res.ok) {
+      let message = "Couldn't generate a preview.";
+      try {
+        const data = await res.json();
+        message = data.detail || message;
+      } catch (_) {}
+      previewFrameStatus.textContent = message;
+      return;
+    }
+
+    const blob = await res.blob();
+    if (mySeq !== previewRequestSeq) return;
+
+    if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
+    previewObjectUrl = URL.createObjectURL(blob);
+    previewFrame.src = previewObjectUrl;
+    previewFrameStatus.textContent = "";
+  } catch (err) {
+    if (mySeq === previewRequestSeq) previewFrameStatus.textContent = "Couldn't reach the server.";
+  }
+}
+
 // ---- Generate + download ----
 
 generateBtn.addEventListener("click", () => generatePdf());
@@ -338,11 +507,7 @@ generateBtn.addEventListener("click", () => generatePdf());
 async function generatePdf() {
   if (!selectedConfig || !currentSession) return;
 
-  const finalConfig = JSON.parse(JSON.stringify(selectedConfig));
-  finalConfig.columns = finalConfig.columns.map((col) => {
-    if (col.type === "image") return col;
-    return { ...col, source_header: columnMapping[col.key] || null };
-  });
+  const finalConfig = buildFinalConfig();
 
   generateBtn.disabled = true;
   generateStatus.className = "status is-loading";

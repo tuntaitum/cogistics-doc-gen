@@ -126,7 +126,7 @@ def extract_images_by_row(ws, valid_rows: set[int], skip_columns: list[int]) -> 
 #  EXCEL READER — generic over config.columns
 # ─────────────────────────────────────────────
 
-def read_excel(path: str, config: DocumentConfig) -> list[dict]:
+def read_excel(path: str, config: DocumentConfig, limit: int | None = None) -> list[dict]:
     wb = openpyxl.load_workbook(path)
     ws = wb.active
 
@@ -160,6 +160,12 @@ def read_excel(path: str, config: DocumentConfig) -> list[dict]:
             continue
         if str(row[select_idx]).strip().lower() == config.select_value.lower():
             valid_rows.add(row_num)
+
+    if limit is not None:
+        # Truncate BEFORE image extraction — extract_images_by_row is the
+        # expensive part on image-heavy sheets, and a preview only ever
+        # needs to render a handful of rows.
+        valid_rows = set(sorted(valid_rows)[:limit])
 
     row_images = {}
     if has_image_column:

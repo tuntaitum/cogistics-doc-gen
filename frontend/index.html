@@ -86,6 +86,33 @@
 
     <div class="mapping-list" id="mapping-list"></div>
 
+    <div class="customize" id="customize-section">
+      <button type="button" class="customize__toggle" id="customize-toggle" aria-expanded="false">
+        <span>Customize headers &amp; column widths</span>
+        <span class="customize__chevron" aria-hidden="true">▾</span>
+      </button>
+
+      <div class="customize__body" id="customize-body" hidden>
+        <div class="field-row">
+          <label for="doc-title-input" class="field-row__label">
+            Document title
+            <span class="field-row__hint">Printed at the top of the PDF</span>
+          </label>
+          <input type="text" id="doc-title-input" class="field-row__input field-row__input--wide">
+        </div>
+
+        <div class="customize-list" id="customize-list"></div>
+
+        <div class="preview-frame-wrap">
+          <div class="preview-frame-header">
+            <span>Live preview</span>
+            <span class="preview-frame-status" id="preview-frame-status"></span>
+          </div>
+          <iframe class="preview-frame" id="preview-frame" title="PDF preview"></iframe>
+        </div>
+      </div>
+    </div>
+
     <button class="btn btn--primary" id="generate-btn" disabled>Generate PDF</button>
     <div class="status" id="generate-status" role="status" aria-live="polite"></div>
 
