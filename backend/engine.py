@@ -7,6 +7,8 @@ to read from the hardcoded PATHS / BRAND dicts now takes a DocumentConfig
 catalog, BU catalog, and quotation sheet all flow through the same code.
 """
 
+from __future__ import annotations  # lets `int | None` etc. work on Python < 3.10
+
 import io
 import os
 import openpyxl
