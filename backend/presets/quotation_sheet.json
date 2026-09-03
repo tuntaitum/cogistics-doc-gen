@@ -5,9 +5,9 @@
   "intro_text_template": "This quotation covers {count} item(s).",
   "header_row": 2,
   "data_start_row": 3,
-  "select_column": "Include",
+  "select_column": "Select",
   "select_value": "yes",
-  "image_skip_columns": [],
+  "image_skip_columns": [5],
   "columns": [
     { "key": "name", "label": "Item", "type": "text", "source_header": "Item Name", "width_mode": "flex", "flex_weight": 1.4, "emphasis": true },
     { "key": "qty", "label": "Quantity", "type": "text", "source_header": "Quantity", "width_mm": 25, "align": "center" },
