@@ -24,8 +24,51 @@ from reportlab.platypus import (
     Paragraph, Spacer, Image, Flowable
 )
 from reportlab.pdfgen import canvas as pdfcanvas
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 
 from schemas import DocumentConfig
+
+# ─────────────────────────────────────────────
+#  FONT REGISTRATION — Unicode support (Thai + Latin)
+#
+#  The base-14 PDF fonts (Helvetica etc.) only cover Latin/Western text —
+#  Thai (and any other non-Latin script) renders as solid black boxes with
+#  no error raised, which is easy to miss until you actually look at the
+#  output. Noto Sans Thai covers both Thai and Latin in one font, so mixed
+#  Thai+English cells (common in this data) render correctly without needing
+#  per-run font switching. Bold/Regular are real static instances (see
+#  fonts/README.md for how they were generated from Google's variable font),
+#  not a synthetic/faked bold.
+# ─────────────────────────────────────────────
+
+FONTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
+FONT_REGULAR = "NotoSansThai"
+FONT_BOLD = "NotoSansThai-Bold"
+_FONTS_REGISTERED = False
+
+
+def _ensure_fonts_registered():
+    global _FONTS_REGISTERED, FONT_REGULAR, FONT_BOLD
+    if _FONTS_REGISTERED:
+        return
+    regular_path = os.path.join(FONTS_DIR, "NotoSansThai-Regular.ttf")
+    bold_path = os.path.join(FONTS_DIR, "NotoSansThai-Bold.ttf")
+    try:
+        pdfmetrics.registerFont(TTFont(FONT_REGULAR, regular_path))
+        pdfmetrics.registerFont(TTFont(FONT_BOLD, bold_path))
+        pdfmetrics.registerFontFamily(
+            FONT_REGULAR, normal=FONT_REGULAR, bold=FONT_BOLD,
+            italic=FONT_REGULAR, boldItalic=FONT_BOLD,
+        )
+    except Exception:
+        # Fall back to Helvetica rather than hard-crash generation if the
+        # font files are ever missing from a deployment — Latin text still
+        # works, only non-Latin scripts would degrade back to black boxes.
+        FONT_REGULAR = "Helvetica"
+        FONT_BOLD = "Helvetica-Bold"
+    _FONTS_REGISTERED = True
+
 
 PAGE_W, PAGE_H = A4
 MARGIN = 18 * mm
@@ -258,9 +301,9 @@ def make_branded_canvas(config: DocumentConfig, assets_dir: str):
                                 height=22 * mm, preserveAspectRatio=True, mask="auto")
             elif not banner_left:
                 self.setFillColor(colors.white)
-                self.setFont("Helvetica-Bold", 13)
+                self.setFont(FONT_BOLD, 13)
                 self.drawString(MARGIN, h - 13 * mm, brand.company_name)
-                self.setFont("Helvetica", 8)
+                self.setFont(FONT_REGULAR, 8)
                 self.setFillColor(c_accent)
                 self.drawString(MARGIN, h - 18.5 * mm, brand.tagline)
 
@@ -277,7 +320,7 @@ def make_branded_canvas(config: DocumentConfig, assets_dir: str):
             self.rect(0, 12 * mm, w, 0.8 * mm, fill=1, stroke=0)
 
             self.setFillColor(c_mid)
-            self.setFont("Helvetica", 7.5)
+            self.setFont(FONT_REGULAR, 7.5)
             self.drawString(MARGIN - 5 * mm, 4.5 * mm, f"{brand.company_name} --- {brand.tagline}")
             self.drawRightString(w - MARGIN + 5 * mm, 4.5 * mm, f"Page {self._pageNumber} of {total}")
 
@@ -290,7 +333,7 @@ def make_branded_canvas(config: DocumentConfig, assets_dir: str):
             line_y = SIGNATURE_AREA_HEIGHT - 6 * mm
             label_y = SIGNATURE_AREA_HEIGHT - 11 * mm
 
-            self.setFont("Helvetica", 8.5)
+            self.setFont(FONT_REGULAR, 8.5)
             for i, label in enumerate(labels):
                 x0 = MARGIN + i * col_w
                 line_width = col_w * 0.72
@@ -333,7 +376,7 @@ def make_thumbnail(image_bytes, c_light_bg, c_accent, c_mid, size=THUMB_SIZE):
             self.canv.setStrokeColor(c_accent)
             self.canv.roundRect(0, 0, self.width, self.height, 4, fill=1, stroke=1)
             self.canv.setFillColor(c_mid)
-            self.canv.setFont("Helvetica", 6)
+            self.canv.setFont(FONT_REGULAR, 6)
             self.canv.drawCentredString(self.width / 2, self.height / 2 - 3, "No Image")
 
     return PlaceholderBox(size)
@@ -434,19 +477,19 @@ def build_footer_blocks(config: DocumentConfig, styles: dict, c_mid, c_dark):
 
 def make_styles(c_dark, c_mid, c_white, c_primary):
     return {
-        "product_name": ParagraphStyle("ProductName", fontName="Helvetica-Bold",
+        "product_name": ParagraphStyle("ProductName", fontName=FONT_BOLD,
                                         fontSize=9, textColor=c_dark, leading=13),
-        "dim_text": ParagraphStyle("DimText", fontName="Helvetica",
+        "dim_text": ParagraphStyle("DimText", fontName=FONT_REGULAR,
                                     fontSize=8, textColor=c_mid, leading=11, spaceBefore=3),
-        "price_text": ParagraphStyle("PriceText", fontName="Helvetica",
+        "price_text": ParagraphStyle("PriceText", fontName=FONT_REGULAR,
                                       fontSize=8, textColor=c_mid, leading=11, spaceBefore=3,
                                       alignment=TA_CENTER),
-        "col_header": ParagraphStyle("ColHeader", fontName="Helvetica-Bold",
+        "col_header": ParagraphStyle("ColHeader", fontName=FONT_BOLD,
                                       fontSize=8.5, textColor=c_white, alignment=TA_CENTER),
-        "cat_title": ParagraphStyle("CatTitle", fontName="Helvetica-Bold",
+        "cat_title": ParagraphStyle("CatTitle", fontName=FONT_BOLD,
                                      fontSize=18, textColor=c_primary, spaceAfter=12,
                                      leftIndent=-(7 * mm)),
-        "intro": ParagraphStyle("Intro", fontName="Helvetica",
+        "intro": ParagraphStyle("Intro", fontName=FONT_REGULAR,
                                  fontSize=9, textColor=c_mid, spaceAfter=13,
                                  leftIndent=-(7 * mm)),
     }
@@ -457,6 +500,7 @@ def make_styles(c_dark, c_mid, c_white, c_primary):
 # ─────────────────────────────────────────────
 
 def generate_pdf(items: list[dict], config: DocumentConfig, output_path: str, assets_dir: str):
+    _ensure_fonts_registered()
     brand = config.brand
     c_primary = HexColor(brand.primary)
     c_accent = HexColor(brand.accent)

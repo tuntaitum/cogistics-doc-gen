@@ -160,9 +160,53 @@ def test_signature_only_on_last_page():
     print("PASS")
 
 
+def test_thai_text_renders():
+    """
+    Regression test: Thai text must render as real embedded text (not boxes,
+    not silently dropped). Found via a real Cogistics export with a Thai
+    company name — Helvetica has no Thai glyphs and reportlab silently drew
+    black boxes instead of raising an error. Extracts text back out of the
+    generated PDF with pdftotext to prove the actual Thai characters are
+    embedded, not just visually present in a screenshot.
+    """
+    print("\n=== thai_text_renders (regression) ===")
+    xlsx_path = os.path.join(OUT, "thai_regression_input.xlsx")
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["title"])
+    ws.append(["Select", "Product Name", "Dimension (Spec)", "Supply Advantage", "Price Range (THB/kg)"])
+    thai_name = "บริษัท ออน-กรีน โปรดิวส์ จำกัด"
+    ws.append(["Yes", thai_name, "10x10", "adv", "100"])
+    wb.save(xlsx_path)
+
+    with open(os.path.join(HERE, "presets", "client_catalog.json")) as f:
+        config = DocumentConfig(**json.load(f))
+
+    items = engine.read_excel(xlsx_path, config)
+    out_pdf = os.path.join(OUT, "thai_regression_output.pdf")
+    engine.generate_pdf(items, config, out_pdf, ASSETS)
+
+    import subprocess
+    result = subprocess.run(["pdftotext", "-layout", out_pdf, "-"], capture_output=True, text=True)
+    extracted = result.stdout
+    # Check each word independently rather than requiring one exact contiguous
+    # match: pdftotext -layout interleaves table columns in reading order, so
+    # when a long cell value wraps onto two lines, other columns' content from
+    # the same row gets extracted in between — a text-extraction-order quirk,
+    # not a rendering defect (confirmed correct visually via screenshot).
+    words = thai_name.replace("-", " ").split()
+    missing = [w for w in words if w not in extracted]
+    assert not missing, (
+        f"Thai word(s) not found as real text in the generated PDF (rendered "
+        f"as boxes or dropped): {missing}. Extracted text was: {extracted!r}"
+    )
+    print("PASS: Thai text extracted correctly from the generated PDF")
+
+
 if __name__ == "__main__":
     run_case("client_catalog", build_client_catalog_xlsx, "client_catalog.json")
     run_case("quotation_sheet", build_quotation_xlsx, "quotation_sheet.json")
     test_truncated_dimension_metadata()
     test_signature_only_on_last_page()
+    test_thai_text_renders()
     print("\nAll cases passed.")
