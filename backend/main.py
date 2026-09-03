@@ -1,20 +1,34 @@
 """
 main.py — CoDocuments backend API.
 
-Replaces launcher.py. Four jobs:
+Replaces launcher.py. Jobs:
   1. Accept an uploaded .xlsx, return detected headers (for the mapping UI)
   2. Serve/save/delete presets (DocumentConfig JSON files)
   3. Generate a PDF from an uploaded file + a config (preset + user's column mapping)
-  4. Let the frontend download the finished PDF
+  4. Preview a PDF from a partial config, for the customize UI
+  5. Let the frontend download the finished PDF
+  6. Periodically delete old uploads/output files — this is a working-files
+     folder, not permanent storage (see RETENTION_HOURS below)
 
 Run with:
     uvicorn main:app --reload
 """
 
+from __future__ import annotations  # for internal helpers only — see note on FastAPI params below
+
+import asyncio
 import json
+import logging
 import os
+import re
+import time
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Optional  # used explicitly (not `X | None`) for FastAPI route params —
+                              # FastAPI must actually resolve these types at runtime to build
+                              # validation, so the lazy-string trick above doesn't protect them
+                              # the way it does a plain internal function's annotations.
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,6 +37,8 @@ from pydantic import ValidationError
 
 import engine
 from schemas import DocumentConfig
+
+logger = logging.getLogger("codocuments")
 
 BASE_DIR = Path(__file__).parent
 PRESETS_DIR = BASE_DIR / "presets"
@@ -33,7 +49,48 @@ OUTPUT_DIR = BASE_DIR / "output"
 UPLOADS_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-app = FastAPI(title="CoDocuments API")
+# Uploads and generated PDFs are working files for an active session, not
+# permanent storage — once someone's downloaded their PDF, the app's job is
+# done. Anything older than this gets deleted by the background sweep below.
+RETENTION_HOURS = 6
+CLEANUP_INTERVAL_SECONDS = 30 * 60  # sweep twice an hour
+
+
+def _cleanup_old_files():
+    cutoff = time.time() - (RETENTION_HOURS * 3600)
+    deleted = 0
+    for directory in (UPLOADS_DIR, OUTPUT_DIR):
+        for path in directory.iterdir():
+            if path.name == ".gitkeep" or not path.is_file():
+                continue
+            try:
+                if path.stat().st_mtime < cutoff:
+                    path.unlink()
+                    deleted += 1
+            except FileNotFoundError:
+                pass  # already removed by a concurrent sweep or the OS
+    if deleted:
+        logger.info(f"Cleanup: deleted {deleted} file(s) older than {RETENTION_HOURS}h")
+
+
+async def _cleanup_loop():
+    while True:
+        try:
+            _cleanup_old_files()
+        except Exception:
+            logger.exception("Cleanup sweep failed")
+        await asyncio.sleep(CLEANUP_INTERVAL_SECONDS)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    _cleanup_old_files()  # sweep once on startup too, in case the app was down a while
+    task = asyncio.create_task(_cleanup_loop())
+    yield
+    task.cancel()
+
+
+app = FastAPI(title="CoDocuments API", lifespan=lifespan)
 
 # Internal tool for now — open CORS. Tighten this once it's deployed
 # somewhere with a known frontend origin.
@@ -226,12 +283,29 @@ def preview(session_id: str = Form(...), config_json: str = Form(...), row_limit
     return FileResponse(preview_path, media_type="application/pdf")
 
 
+def _safe_pdf_filename(raw: str | None, fallback: str = "document") -> str:
+    """
+    Turn user-supplied text into a safe PDF filename for the Content-Disposition
+    header: strip path separators / control characters, collapse whitespace,
+    cap length, and always end in .pdf.
+    """
+    name = (raw or "").strip()
+    name = re.sub(r'[\\/:*?"<>|\r\n\t]', "", name)  # no path separators or control-ish chars
+    name = re.sub(r"\s+", " ", name).strip()
+    name = name[:150]
+    if not name:
+        name = fallback
+    if not name.lower().endswith(".pdf"):
+        name += ".pdf"
+    return name
+
+
 @app.get("/api/download/{session_id}")
-def download(session_id: str):
+def download(session_id: str, filename: Optional[str] = None):
     path = OUTPUT_DIR / f"{session_id}.pdf"
     if not path.exists():
         raise HTTPException(404, "PDF not found — generate it first")
-    return FileResponse(path, media_type="application/pdf", filename="document.pdf")
+    return FileResponse(path, media_type="application/pdf", filename=_safe_pdf_filename(filename))
 
 
 @app.get("/api/health")

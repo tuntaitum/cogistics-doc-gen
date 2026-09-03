@@ -46,8 +46,13 @@ def detect_headers(path: str, header_row: int = 2) -> list[str]:
     files exported from Google Sheets/Lark often have that metadata wrong
     (truncated), which silently drops real columns. Fully parsing avoids it —
     same approach read_excel() already uses.
+
+    data_only=True: for a formula cell, return its last-calculated cached
+    value (what Excel/Sheets actually saved) rather than the formula string
+    itself. Headers are rarely formulas, but this keeps behavior consistent
+    with read_excel() below.
     """
-    wb = openpyxl.load_workbook(path)
+    wb = openpyxl.load_workbook(path, data_only=True)
     ws = wb.active
     row = next(ws.iter_rows(min_row=header_row, max_row=header_row))
     headers = [str(c.value).strip() for c in row if c.value not in (None, "")]
@@ -129,7 +134,12 @@ def extract_images_by_row(ws, valid_rows: set[int], skip_columns: list[int]) -> 
 # ─────────────────────────────────────────────
 
 def read_excel(path: str, config: DocumentConfig, limit: int | None = None) -> list[dict]:
-    wb = openpyxl.load_workbook(path)
+    # data_only=True: read formula cells' cached calculated values (what
+    # Excel/Sheets last saved), not the formula string itself. Requires the
+    # source file to have actually been opened/saved by a real spreadsheet
+    # app at least once — a workbook written by a script that never
+    # evaluated its own formulas will have no cached value to read.
+    wb = openpyxl.load_workbook(path, data_only=True)
     ws = wb.active
 
     header_cells = next(ws.iter_rows(min_row=config.header_row, max_row=config.header_row))
