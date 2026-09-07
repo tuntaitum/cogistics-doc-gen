@@ -91,13 +91,14 @@
     </section>
 
     <section class="panel" id="panel-preset-preview" hidden>
-      <div class="preview-frame-wrap">
+      <div class="preview-frame-wrap" id="preset-preview-frame-wrap">
         <div class="preview-frame-header">
           <span>Preview with your data (auto-matched columns)</span>
           <span class="preview-frame-status" id="preset-preview-status"></span>
         </div>
         <iframe class="preview-frame" id="preset-preview-frame" title="Document type preview"></iframe>
       </div>
+      <div class="status" id="preset-preview-error" hidden></div>
 
       <button class="btn btn--primary" id="continue-to-mapping-btn">
         Continue → map columns

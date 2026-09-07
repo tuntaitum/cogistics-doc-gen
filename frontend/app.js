@@ -22,7 +22,9 @@ const backToUploadBtn = document.getElementById("back-to-upload");
 const presetList = document.getElementById("preset-list");
 const presetStatus = document.getElementById("preset-status");
 const panelPresetPreview = document.getElementById("panel-preset-preview");
+const presetPreviewFrameWrap = document.getElementById("preset-preview-frame-wrap");
 const presetPreviewFrame = document.getElementById("preset-preview-frame");
+const presetPreviewError = document.getElementById("preset-preview-error");
 const presetPreviewStatus = document.getElementById("preset-preview-status");
 const continueToMappingBtn = document.getElementById("continue-to-mapping-btn");
 
@@ -268,6 +270,7 @@ async function selectPreset(presetId, clickedBtn) {
   presetStatus.className = "status is-loading";
   presetStatus.textContent = "Loading template…";
   panelPresetPreview.hidden = true;
+  clearPresetPreviewFrame(); // always start clean — never let a previous preset's preview linger
 
   try {
     const res = await fetch(`${API_BASE}/api/presets/${presetId}`);
@@ -305,10 +308,47 @@ function findBestHeaderMatch(suggestedHeader, actualHeaders) {
   return loose || null;
 }
 
+function unmatchedRequiredLabels(config) {
+  return config.columns
+    .filter((c) => c.type === "text" && !c.optional && !columnMapping[c.key])
+    .map((c) => c.label);
+}
+
+function clearPresetPreviewFrame() {
+  if (presetPreviewObjectUrl) {
+    URL.revokeObjectURL(presetPreviewObjectUrl);
+    presetPreviewObjectUrl = null;
+  }
+  presetPreviewFrame.src = "about:blank";
+}
+
+function showPresetPreviewError(message) {
+  clearPresetPreviewFrame();
+  presetPreviewFrameWrap.hidden = true;
+  presetPreviewError.hidden = false;
+  presetPreviewError.className = "status is-error";
+  presetPreviewError.textContent = message;
+}
+
 async function runPresetPreview() {
   if (!selectedConfig || !currentSession) return;
   const mySeq = ++presetPreviewSeq;
+
+  presetPreviewFrameWrap.hidden = false;
+  presetPreviewError.hidden = true;
   presetPreviewStatus.textContent = "Loading preview…";
+
+  // Check required-field matching client-side first, rather than letting the
+  // API reject it: gives a clearer, purpose-specific message and avoids
+  // showing a stale iframe if the request fails for an unrelated reason.
+  const missing = unmatchedRequiredLabels(selectedConfig);
+  if (missing.length > 0) {
+    showPresetPreviewError(
+      `Can't preview yet — ${missing.join(", ")} didn't auto-match a column in your file. ` +
+      `You'll map ${missing.length === 1 ? "it" : "them"} manually on the next page.`
+    );
+    return;
+  }
 
   const previewConfig = JSON.parse(JSON.stringify(selectedConfig));
   previewConfig.columns = previewConfig.columns.map((col) => {
@@ -331,7 +371,7 @@ async function runPresetPreview() {
         const data = await res.json();
         message = data.detail || message;
       } catch (_) {}
-      presetPreviewStatus.textContent = message;
+      showPresetPreviewError(message);
       return;
     }
 
@@ -344,7 +384,7 @@ async function runPresetPreview() {
     presetPreviewStatus.textContent = "";
   } catch (err) {
     if (mySeq === presetPreviewSeq) {
-      presetPreviewStatus.textContent = "Couldn't reach the server — you can still continue.";
+      showPresetPreviewError("Couldn't reach the server — you can still continue.");
     }
   }
 }
