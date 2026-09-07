@@ -18,109 +18,154 @@
 <main class="wrap">
 
   <ol class="steps">
-    <li class="steps__item is-active" data-step="1">Upload file</li>
-    <li class="steps__item" data-step="2">Choose document type</li>
-    <li class="steps__item" data-step="3">Generate</li>
+    <li class="steps__item is-active" data-step="1">Upload &amp; check</li>
+    <li class="steps__item" data-step="2">Document type</li>
+    <li class="steps__item" data-step="3">Map &amp; generate</li>
   </ol>
 
-  <section class="panel" id="panel-upload">
-    <h1 class="panel__title">Upload your spreadsheet</h1>
-    <p class="panel__hint">An .xlsx file with a header row and a select column marking which rows to include.</p>
+  <!-- ═══════════════ PAGE 1: Upload & check headers ═══════════════ -->
+  <div class="page" id="page-upload" data-page="1">
 
-    <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload an Excel file">
-      <input type="file" id="file-input" accept=".xlsx" hidden>
-      <div class="dropzone__icon" aria-hidden="true">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
-          <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
-          <path d="M12 3v12"/>
-          <path d="M7 8l5-5 5 5"/>
-        </svg>
+    <section class="panel">
+      <h1 class="panel__title">Upload your spreadsheet</h1>
+      <p class="panel__hint">An .xlsx file with a header row and a select column marking which rows to include.</p>
+
+      <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload an Excel file">
+        <input type="file" id="file-input" accept=".xlsx" hidden>
+        <div class="dropzone__icon" aria-hidden="true">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+            <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+            <path d="M12 3v12"/>
+            <path d="M7 8l5-5 5 5"/>
+          </svg>
+        </div>
+        <p class="dropzone__text"><strong>Drop your .xlsx file here</strong> or click to browse</p>
+        <p class="dropzone__filename" id="dropzone-filename"></p>
       </div>
-      <p class="dropzone__text"><strong>Drop your .xlsx file here</strong> or click to browse</p>
-      <p class="dropzone__filename" id="dropzone-filename"></p>
-    </div>
 
-    <div class="field-row">
-      <label for="header-row" class="field-row__label">
-        Header row
-        <span class="field-row__hint">Which row has your column names? (usually row 2)</span>
-      </label>
-      <input type="number" id="header-row" value="2" min="1" class="field-row__input">
-    </div>
+      <div class="field-row">
+        <label for="header-row" class="field-row__label">
+          Header row
+          <span class="field-row__hint">Which row has your column names? (usually row 2)</span>
+        </label>
+        <input type="number" id="header-row" value="2" min="1" class="field-row__input">
+      </div>
 
-    <button class="btn btn--primary" id="detect-btn" disabled>Detect columns</button>
+      <button class="btn btn--primary" id="detect-btn" disabled>Detect columns</button>
 
-    <div class="status" id="status" role="status" aria-live="polite"></div>
-  </section>
+      <div class="status" id="status" role="status" aria-live="polite"></div>
+    </section>
 
-  <section class="panel" id="panel-headers" hidden>
-    <h2 class="panel__title panel__title--sm">Columns found</h2>
-    <p class="panel__hint" id="headers-summary"></p>
-    <ul class="chip-list" id="header-chips"></ul>
+    <section class="panel" id="panel-headers" hidden>
+      <h2 class="panel__title panel__title--sm">Columns found</h2>
+      <p class="panel__hint" id="headers-summary"></p>
+      <ul class="chip-list" id="header-chips"></ul>
 
-    <div class="preview-table-wrap" id="preview-table-wrap" hidden>
-      <p class="preview-table-label">First few rows, for a sanity check</p>
+      <div class="preview-table-wrap" id="preview-table-wrap" hidden>
+        <p class="preview-table-label">First few rows, for a sanity check</p>
+        <div class="preview-table-scroll">
+          <table class="preview-table" id="preview-table"></table>
+        </div>
+      </div>
+
+      <div class="panel__actions">
+        <button class="btn btn--ghost" id="wrong-row-btn">These don't look right — try a different row</button>
+        <button class="btn btn--primary" id="continue-btn">
+          Continue → choose document type
+        </button>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ═══════════════ PAGE 2: Choose document type ═══════════════ -->
+  <div class="page" id="page-preset" data-page="2" hidden>
+
+    <button type="button" class="btn btn--ghost back-btn" id="back-to-upload">← Back to upload</button>
+
+    <section class="panel">
+      <h2 class="panel__title panel__title--sm">Choose a document type</h2>
+      <p class="panel__hint">Pick the template that matches what you're making.</p>
+      <ul class="preset-list" id="preset-list"></ul>
+      <div class="status" id="preset-status" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="panel" id="panel-preset-preview" hidden>
+      <div class="preview-frame-wrap">
+        <div class="preview-frame-header">
+          <span>Preview with your data (auto-matched columns)</span>
+          <span class="preview-frame-status" id="preset-preview-status"></span>
+        </div>
+        <iframe class="preview-frame" id="preset-preview-frame" title="Document type preview"></iframe>
+      </div>
+
+      <button class="btn btn--primary" id="continue-to-mapping-btn">
+        Continue → map columns
+      </button>
+    </section>
+
+  </div>
+
+  <!-- ═══════════════ PAGE 3: Map columns, customize, generate ═══════════════ -->
+  <div class="page" id="page-mapping" data-page="3" hidden>
+
+    <button type="button" class="btn btn--ghost back-btn" id="back-to-preset">← Back to document type</button>
+
+    <section class="panel">
+      <h2 class="panel__title panel__title--sm">Your data</h2>
+      <p class="panel__hint">First few rows, for reference while you map columns below.</p>
       <div class="preview-table-scroll">
-        <table class="preview-table" id="preview-table"></table>
+        <table class="preview-table" id="mapping-reference-table"></table>
       </div>
-    </div>
+    </section>
 
-    <div class="panel__actions">
-      <button class="btn btn--ghost" id="wrong-row-btn">These don't look right — try a different row</button>
-      <button class="btn btn--primary" id="continue-btn">
-        Continue → choose document type
-      </button>
-    </div>
-  </section>
+    <section class="panel">
+      <h2 class="panel__title panel__title--sm">Map your columns</h2>
+      <p class="panel__hint" id="mapping-hint"></p>
+      <div class="mapping-list" id="mapping-list"></div>
+    </section>
 
-  <section class="panel" id="panel-preset" hidden>
-    <h2 class="panel__title panel__title--sm">Choose a document type</h2>
-    <p class="panel__hint">Pick the template that matches what you're making.</p>
-    <ul class="preset-list" id="preset-list"></ul>
-    <div class="status" id="preset-status" role="status" aria-live="polite"></div>
-  </section>
+    <section class="panel">
+      <h2 class="panel__title panel__title--sm">Customize headers &amp; column widths</h2>
 
-  <section class="panel" id="panel-mapping" hidden>
-    <h2 class="panel__title panel__title--sm">Map your columns</h2>
-    <p class="panel__hint" id="mapping-hint"></p>
-
-    <div class="mapping-list" id="mapping-list"></div>
-
-    <div class="customize" id="customize-section">
-      <button type="button" class="customize__toggle" id="customize-toggle" aria-expanded="false">
-        <span>Customize headers &amp; column widths</span>
-        <span class="customize__chevron" aria-hidden="true">▾</span>
-      </button>
-
-      <div class="customize__body" id="customize-body" hidden>
-        <div class="field-row">
-          <label for="doc-title-input" class="field-row__label">
-            Document title
-            <span class="field-row__hint">Printed at the top of the PDF</span>
-          </label>
-          <input type="text" id="doc-title-input" class="field-row__input field-row__input--wide">
-        </div>
-
-        <div class="customize-list" id="customize-list"></div>
-
-        <div class="preview-frame-wrap">
-          <div class="preview-frame-header">
-            <span>Live preview</span>
-            <span class="preview-frame-status" id="preview-frame-status"></span>
-          </div>
-          <iframe class="preview-frame" id="preview-frame" title="PDF preview"></iframe>
-        </div>
+      <div class="field-row">
+        <label for="doc-title-input" class="field-row__label">
+          Document title
+          <span class="field-row__hint">Printed at the top of the PDF</span>
+        </label>
+        <input type="text" id="doc-title-input" class="field-row__input field-row__input--wide">
       </div>
-    </div>
 
-    <button class="btn btn--primary" id="generate-btn" disabled>Generate PDF</button>
-    <div class="status" id="generate-status" role="status" aria-live="polite"></div>
+      <div class="customize-list" id="customize-list"></div>
 
-    <div class="result" id="result-panel" hidden>
-      <p class="result__text" id="result-text"></p>
-      <a class="btn btn--primary" id="download-link" href="#" download>Download PDF</a>
-    </div>
-  </section>
+      <div class="preview-frame-wrap">
+        <div class="preview-frame-header">
+          <span>Live preview</span>
+          <span class="preview-frame-status" id="preview-frame-status"></span>
+        </div>
+        <iframe class="preview-frame" id="preview-frame" title="PDF preview"></iframe>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="field-row">
+        <label for="filename-input" class="field-row__label">
+          File name
+          <span class="field-row__hint">What the downloaded PDF will be called</span>
+        </label>
+        <input type="text" id="filename-input" class="field-row__input field-row__input--wide">
+      </div>
+
+      <button class="btn btn--primary" id="generate-btn" disabled>Generate PDF</button>
+      <div class="status" id="generate-status" role="status" aria-live="polite"></div>
+
+      <div class="result" id="result-panel" hidden>
+        <p class="result__text" id="result-text"></p>
+        <a class="btn btn--primary" id="download-link" href="#" download>Download PDF</a>
+      </div>
+    </section>
+
+  </div>
 
 </main>
 

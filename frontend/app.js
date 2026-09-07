@@ -1,12 +1,14 @@
 const API_BASE = window.CODOCS_API_BASE || "http://127.0.0.1:8000";
 
+// ---- Element refs ----
+
+// Page 1: upload
 const dropzone = document.getElementById("dropzone");
 const fileInput = document.getElementById("file-input");
 const dropzoneFilename = document.getElementById("dropzone-filename");
 const headerRowInput = document.getElementById("header-row");
 const detectBtn = document.getElementById("detect-btn");
 const statusEl = document.getElementById("status");
-
 const panelHeaders = document.getElementById("panel-headers");
 const headersSummary = document.getElementById("headers-summary");
 const headerChips = document.getElementById("header-chips");
@@ -15,25 +17,36 @@ const previewTable = document.getElementById("preview-table");
 const wrongRowBtn = document.getElementById("wrong-row-btn");
 const continueBtn = document.getElementById("continue-btn");
 
-const panelPreset = document.getElementById("panel-preset");
+// Page 2: document type
+const backToUploadBtn = document.getElementById("back-to-upload");
 const presetList = document.getElementById("preset-list");
 const presetStatus = document.getElementById("preset-status");
+const panelPresetPreview = document.getElementById("panel-preset-preview");
+const presetPreviewFrame = document.getElementById("preset-preview-frame");
+const presetPreviewStatus = document.getElementById("preset-preview-status");
+const continueToMappingBtn = document.getElementById("continue-to-mapping-btn");
 
-const panelMapping = document.getElementById("panel-mapping");
+// Page 3: map, customize, generate
+const backToPresetBtn = document.getElementById("back-to-preset");
+const mappingReferenceTable = document.getElementById("mapping-reference-table");
 const mappingHint = document.getElementById("mapping-hint");
 const mappingList = document.getElementById("mapping-list");
+const docTitleInput = document.getElementById("doc-title-input");
+const customizeList = document.getElementById("customize-list");
+const previewFrame = document.getElementById("preview-frame");
+const previewFrameStatus = document.getElementById("preview-frame-status");
+const filenameInput = document.getElementById("filename-input");
 const generateBtn = document.getElementById("generate-btn");
 const generateStatus = document.getElementById("generate-status");
 const resultPanel = document.getElementById("result-panel");
 const resultText = document.getElementById("result-text");
 const downloadLink = document.getElementById("download-link");
 
-const customizeToggle = document.getElementById("customize-toggle");
-const customizeBody = document.getElementById("customize-body");
-const docTitleInput = document.getElementById("doc-title-input");
-const customizeList = document.getElementById("customize-list");
-const previewFrame = document.getElementById("preview-frame");
-const previewFrameStatus = document.getElementById("preview-frame-status");
+const pages = {
+  1: document.getElementById("page-upload"),
+  2: document.getElementById("page-preset"),
+  3: document.getElementById("page-mapping"),
+};
 
 const WIDTH_PRESETS = { narrow: 0.6, medium: 1.0, wide: 1.5, xwide: 2.2 };
 const WIDTH_PRESETS_MM = { narrow: 20, medium: 30, wide: 45, xwide: 60 };
@@ -43,13 +56,33 @@ const WIDTH_PRESET_ORDER = ["narrow", "medium", "wide", "xwide"];
 let selectedFile = null;
 let currentSession = null; // { session_id, filename, headers, preview_rows }
 let selectedConfig = null; // full DocumentConfig of the chosen preset
-let columnMapping = {};    // { columnKey: excelHeader }
+let columnMapping = {};    // { columnKey: excelHeader } — computed once on preset select, edited on page 3
 let customization = {};    // { columnKey: { label, widthPreset } }
 let previewDebounceTimer = null;
 let previewObjectUrl = null;
-let previewRequestSeq = 0; // guards against an in-flight preview response arriving out of order
+let previewRequestSeq = 0;
+let presetPreviewObjectUrl = null;
+let presetPreviewSeq = 0;
 
-// ---- File selection ----
+// ---- Page navigation ----
+
+function goToPage(n) {
+  Object.entries(pages).forEach(([num, el]) => {
+    el.hidden = Number(num) !== n;
+  });
+  document.querySelectorAll(".steps__item").forEach((el) => {
+    const step = Number(el.dataset.step);
+    el.classList.remove("is-active", "is-done");
+    if (step < n) el.classList.add("is-done");
+    if (step === n) el.classList.add("is-active");
+  });
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+backToUploadBtn.addEventListener("click", () => goToPage(1));
+backToPresetBtn.addEventListener("click", () => goToPage(2));
+
+// ---- Page 1: file selection ----
 
 dropzone.addEventListener("click", () => fileInput.click());
 dropzone.addEventListener("keydown", (e) => {
@@ -95,7 +128,7 @@ function handleFileSelected(file) {
   panelHeaders.hidden = true;
 }
 
-// ---- Header detection ----
+// ---- Page 1: header detection ----
 
 detectBtn.addEventListener("click", () => detectHeaders());
 wrongRowBtn.addEventListener("click", () => {
@@ -149,16 +182,16 @@ function showHeaders(data) {
     headerChips.appendChild(li);
   });
 
-  renderPreviewTable(data.headers, data.preview_rows);
+  renderReferenceTable(previewTable, previewWrap, data.headers, data.preview_rows);
 
   panelHeaders.hidden = false;
-  markStepDone(1);
   panelHeaders.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function renderPreviewTable(headers, rows) {
+function renderReferenceTable(tableEl, wrapEl, headers, rows) {
   if (!rows || rows.length === 0) {
-    previewWrap.hidden = true;
+    if (wrapEl) wrapEl.hidden = true;
+    tableEl.innerHTML = "";
     return;
   }
   const thead = `<thead><tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead>`;
@@ -168,8 +201,8 @@ function renderPreviewTable(headers, rows) {
         `<tr>${headers.map((h) => `<td>${escapeHtml(row[h] ?? "")}</td>`).join("")}</tr>`
     )
     .join("")}</tbody>`;
-  previewTable.innerHTML = thead + tbody;
-  previewWrap.hidden = false;
+  tableEl.innerHTML = thead + tbody;
+  if (wrapEl) wrapEl.hidden = false;
 }
 
 function escapeHtml(str) {
@@ -178,19 +211,18 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-// ---- Step 2: preset picker ----
+// ---- Page 2: preset picker + inline preview ----
 
-continueBtn.addEventListener("click", () => loadPresets());
+continueBtn.addEventListener("click", () => {
+  goToPage(2);
+  loadPresets();
+});
 
 async function loadPresets() {
-  markStepActive(2);
   presetStatus.className = "status is-loading";
   presetStatus.textContent = "Loading document types…";
   presetList.innerHTML = "";
-  panelPreset.hidden = false;
-  panelMapping.hidden = true;
-  resultPanel.hidden = true;
-  panelPreset.scrollIntoView({ behavior: "smooth", block: "start" });
+  panelPresetPreview.hidden = true;
 
   try {
     const res = await fetch(`${API_BASE}/api/presets`);
@@ -235,6 +267,7 @@ async function selectPreset(presetId, clickedBtn) {
 
   presetStatus.className = "status is-loading";
   presetStatus.textContent = "Loading template…";
+  panelPresetPreview.hidden = true;
 
   try {
     const res = await fetch(`${API_BASE}/api/presets/${presetId}`);
@@ -247,22 +280,88 @@ async function selectPreset(presetId, clickedBtn) {
     presetStatus.className = "status";
     presetStatus.textContent = "";
     selectedConfig = config;
-    markStepDone(2);
-    showMappingForm(config);
+    computeAutoMapping(config);
+    panelPresetPreview.hidden = false;
+    runPresetPreview();
   } catch (err) {
     presetStatus.className = "status is-error";
     presetStatus.textContent = "Couldn't reach the server.";
   }
 }
 
-// ---- Step 3: column mapping ----
+function computeAutoMapping(config) {
+  columnMapping = {};
+  config.columns.forEach((col) => {
+    if (col.type === "image") return;
+    columnMapping[col.key] = findBestHeaderMatch(col.source_header, currentSession.headers) || "";
+  });
+}
+
+function findBestHeaderMatch(suggestedHeader, actualHeaders) {
+  if (!suggestedHeader) return null;
+  const exact = actualHeaders.find((h) => h === suggestedHeader);
+  if (exact) return exact;
+  const loose = actualHeaders.find((h) => h.trim().toLowerCase() === suggestedHeader.trim().toLowerCase());
+  return loose || null;
+}
+
+async function runPresetPreview() {
+  if (!selectedConfig || !currentSession) return;
+  const mySeq = ++presetPreviewSeq;
+  presetPreviewStatus.textContent = "Loading preview…";
+
+  const previewConfig = JSON.parse(JSON.stringify(selectedConfig));
+  previewConfig.columns = previewConfig.columns.map((col) => {
+    if (col.type === "image") return col;
+    return { ...col, source_header: columnMapping[col.key] || null };
+  });
+
+  try {
+    const form = new FormData();
+    form.append("session_id", currentSession.session_id);
+    form.append("config_json", JSON.stringify(previewConfig));
+    form.append("row_limit", "3");
+
+    const res = await fetch(`${API_BASE}/api/preview`, { method: "POST", body: form });
+    if (mySeq !== presetPreviewSeq) return;
+
+    if (!res.ok) {
+      let message = "Couldn't generate a preview — you can still continue and map columns manually.";
+      try {
+        const data = await res.json();
+        message = data.detail || message;
+      } catch (_) {}
+      presetPreviewStatus.textContent = message;
+      return;
+    }
+
+    const blob = await res.blob();
+    if (mySeq !== presetPreviewSeq) return;
+
+    if (presetPreviewObjectUrl) URL.revokeObjectURL(presetPreviewObjectUrl);
+    presetPreviewObjectUrl = URL.createObjectURL(blob);
+    presetPreviewFrame.src = presetPreviewObjectUrl;
+    presetPreviewStatus.textContent = "";
+  } catch (err) {
+    if (mySeq === presetPreviewSeq) {
+      presetPreviewStatus.textContent = "Couldn't reach the server — you can still continue.";
+    }
+  }
+}
+
+continueToMappingBtn.addEventListener("click", () => {
+  goToPage(3);
+  showMappingForm(selectedConfig);
+});
+
+// ---- Page 3: column mapping ----
 
 function showMappingForm(config) {
-  markStepActive(3);
   mappingHint.textContent =
     `"${config.name}" — match each field to a column from your file. Fields matching your file's headers are pre-filled; check them and adjust anything that's wrong.`;
 
-  columnMapping = {};
+  renderReferenceTable(mappingReferenceTable, null, currentSession.headers, currentSession.preview_rows);
+
   mappingList.innerHTML = "";
 
   config.columns.forEach((col) => {
@@ -276,9 +375,6 @@ function showMappingForm(config) {
       mappingList.appendChild(row);
       return;
     }
-
-    const bestMatch = findBestHeaderMatch(col.source_header, currentSession.headers);
-    columnMapping[col.key] = bestMatch || "";
 
     const row = document.createElement("div");
     row.className = "mapping-row";
@@ -297,11 +393,12 @@ function showMappingForm(config) {
     blankOpt.textContent = "— not mapped —";
     select.appendChild(blankOpt);
 
+    const currentValue = columnMapping[col.key] || "";
     currentSession.headers.forEach((h) => {
       const opt = document.createElement("option");
       opt.value = h;
       opt.textContent = h;
-      if (h === bestMatch) opt.selected = true;
+      if (h === currentValue) opt.selected = true;
       select.appendChild(opt);
     });
 
@@ -319,21 +416,13 @@ function showMappingForm(config) {
     mappingList.appendChild(row);
   });
 
-  panelMapping.hidden = false;
+  buildCustomizeSection(config);
+  buildFilenameDefault(config);
   resultPanel.hidden = true;
   generateStatus.className = "status";
   generateStatus.textContent = "";
   updateGenerateAvailability();
-  buildCustomizeSection(config);
-  panelMapping.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
-function findBestHeaderMatch(suggestedHeader, actualHeaders) {
-  if (!suggestedHeader) return null;
-  const exact = actualHeaders.find((h) => h === suggestedHeader);
-  if (exact) return exact;
-  const loose = actualHeaders.find((h) => h.trim().toLowerCase() === suggestedHeader.trim().toLowerCase());
-  return loose || null;
+  schedulePreview(true);
 }
 
 function updateSelectValidity(select) {
@@ -349,17 +438,10 @@ function updateGenerateAvailability() {
   generateBtn.disabled = !allRequiredMapped;
 }
 
-// ---- Step 3b: customize headers & widths, with live preview ----
-
-customizeToggle.addEventListener("click", () => {
-  const isOpen = customizeToggle.getAttribute("aria-expanded") === "true";
-  customizeToggle.setAttribute("aria-expanded", String(!isOpen));
-  customizeBody.hidden = isOpen;
-  if (!isOpen) schedulePreview(true); // opening the panel: show a preview right away
-});
+// ---- Page 3: customize headers & widths, with live preview ----
 
 function closestWidthPreset(col) {
-  const widthMode = col.width_mode || "fixed"; // schema default, in case an unnormalized config slips through
+  const widthMode = col.width_mode || "fixed";
   const map = widthMode === "fixed" ? WIDTH_PRESETS_MM : WIDTH_PRESETS;
   const currentValue = widthMode === "fixed" ? col.width_mm : col.flex_weight;
   if (currentValue == null) return "medium";
@@ -430,7 +512,7 @@ function buildCustomizeSection(config) {
   });
 }
 
-function buildFinalConfig(rowLimit) {
+function buildFinalConfig() {
   const finalConfig = JSON.parse(JSON.stringify(selectedConfig));
   finalConfig.document_title = docTitleInput.value || selectedConfig.document_title;
   finalConfig.columns = finalConfig.columns.map((col) => {
@@ -453,7 +535,6 @@ function buildFinalConfig(rowLimit) {
 }
 
 function schedulePreview(immediate) {
-  if (customizeBody.hidden) return; // no point rendering a preview nobody can see yet
   clearTimeout(previewDebounceTimer);
   const requiredOk = !generateBtn.disabled;
   if (!requiredOk) {
@@ -476,7 +557,7 @@ async function runPreview() {
 
     const res = await fetch(`${API_BASE}/api/preview`, { method: "POST", body: form });
 
-    if (mySeq !== previewRequestSeq) return; // a newer request superseded this one
+    if (mySeq !== previewRequestSeq) return;
 
     if (!res.ok) {
       let message = "Couldn't generate a preview.";
@@ -498,6 +579,19 @@ async function runPreview() {
   } catch (err) {
     if (mySeq === previewRequestSeq) previewFrameStatus.textContent = "Couldn't reach the server.";
   }
+}
+
+// ---- Page 3: file name ----
+
+function buildFilenameDefault(config) {
+  filenameInput.value = sanitizeFilenameInput(config.document_title || config.name);
+}
+
+function sanitizeFilenameInput(raw) {
+  return String(raw || "document")
+    .replace(/[\\/:*?"<>|\r\n\t]/g, "")
+    .trim()
+    .slice(0, 150) || "document";
 }
 
 // ---- Generate + download ----
@@ -531,9 +625,11 @@ async function generatePdf() {
     generateStatus.className = "status is-success";
     generateStatus.textContent = "Done.";
     resultText.textContent = `${data.item_count} item${data.item_count === 1 ? "" : "s"} included.`;
-    downloadLink.href = `${API_BASE}${data.download_url}`;
+
+    const finalName = sanitizeFilenameInput(filenameInput.value);
+    downloadLink.href = `${API_BASE}${data.download_url}?filename=${encodeURIComponent(finalName)}`;
+    downloadLink.download = finalName.toLowerCase().endsWith(".pdf") ? finalName : `${finalName}.pdf`;
     resultPanel.hidden = false;
-    markStepDone(3);
   } catch (err) {
     generateStatus.className = "status is-error";
     generateStatus.textContent = "Couldn't reach the server.";
@@ -542,7 +638,7 @@ async function generatePdf() {
   }
 }
 
-// ---- Status / step helpers ----
+// ---- Status helpers ----
 
 function setLoading(msg) {
   statusEl.className = "status is-loading";
@@ -555,16 +651,4 @@ function showError(msg) {
 function clearStatus() {
   statusEl.className = "status";
   statusEl.textContent = "";
-}
-function markStepDone(stepNumber) {
-  const item = document.querySelector(`.steps__item[data-step="${stepNumber}"]`);
-  if (item) {
-    item.classList.remove("is-active");
-    item.classList.add("is-done");
-  }
-}
-function markStepActive(stepNumber) {
-  document.querySelectorAll(".steps__item").forEach((el) => el.classList.remove("is-active"));
-  const item = document.querySelector(`.steps__item[data-step="${stepNumber}"]`);
-  if (item) item.classList.add("is-active");
 }

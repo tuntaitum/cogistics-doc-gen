@@ -75,7 +75,10 @@ python3 -m http.server 8080
 
 Then open `http://127.0.0.1:8080`. It talks to the backend at `http://127.0.0.1:8000` by default; override by setting `window.CODOCS_API_BASE` before `app.js` loads if you're running the backend elsewhere.
 
-Currently implemented: upload an `.xlsx`, detect its headers and preview the first few rows, and retry with a different header row if it looks wrong. The "Continue" button is intentionally disabled — document type selection (step 5) isn't built yet.
+Three real pages with Back navigation:
+1. **Upload & check** — drag/drop `.xlsx`, detect headers, preview first rows, retry with a different header row.
+2. **Document type** — pick a template, see a live preview rendered from your actual data (auto-matched columns) before committing to it.
+3. **Map & generate** — reference table of your data alongside column-mapping dropdowns, header/width customization with live preview, a file name field, and Generate → Download.
 
 ## How templates work
 
