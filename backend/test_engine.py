@@ -55,7 +55,7 @@ def build_quotation_xlsx(path):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.append(["-- title row --"])
-    ws.append(["Include", "Item Name", "Quantity", "Unit Price", "Remarks"])
+    ws.append(["Select", "Item Name", "Quantity", "Unit Price", "Remarks"])
     rows = [
         ["Yes", "Cardboard Box (M)", "500", "12.50", "Bulk discount applied"],
         ["Yes", "Pallet Wrap", "50", "45.00", ""],
@@ -136,7 +136,7 @@ def test_signature_only_on_last_page():
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.append(["title"])
-    ws.append(["Include", "Item Name", "Quantity", "Unit Price", "Remarks"])
+    ws.append(["Select", "Item Name", "Quantity", "Unit Price", "Remarks"])
     for i in range(40):  # enough rows to force multiple pages
         ws.append(["Yes", f"Item {i+1:02d}", str(10 * (i + 1)), f"{5.5+i}", "remark"])
     wb.save(xlsx_path)

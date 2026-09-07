@@ -553,7 +553,9 @@ async function runPreview() {
     const form = new FormData();
     form.append("session_id", currentSession.session_id);
     form.append("config_json", JSON.stringify(buildFinalConfig()));
-    form.append("row_limit", "3");
+    // No row_limit here — page 3's preview should show every item that will
+    // actually be in the final PDF, not just a 3-row sample. Page 2's quick
+    // preview (runPresetPreview) still caps at 3 for a fast first look.
 
     const res = await fetch(`${API_BASE}/api/preview`, { method: "POST", body: form });
 

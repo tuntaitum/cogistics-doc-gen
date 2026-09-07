@@ -257,14 +257,17 @@ def generate(session_id: str = Form(...), config_json: str = Form(...)):
 
 
 @app.post("/api/preview")
-def preview(session_id: str = Form(...), config_json: str = Form(...), row_limit: int = Form(3)):
+def preview(session_id: str = Form(...), config_json: str = Form(...), row_limit: Optional[int] = Form(None)):
     """
-    Fast preview for the label/width customization UI: renders a real PDF
-    (same engine, same styling) using only the first `row_limit` matched
-    rows, and returns the PDF bytes directly for inline display — not a
-    download link. This is deliberately the same rendering path as
-    /api/generate so what the user sees IS what they'll get, not an
-    approximation of it.
+    Renders a real PDF (same engine, same styling) and returns the bytes
+    directly for inline display — not a download link. Deliberately the
+    same rendering path as /api/generate so what the user sees IS what
+    they'll get, not an approximation of it.
+
+    row_limit caps how many matched rows are rendered — pass null/omit for
+    no limit (all matched rows), used by the page-3 customize preview so
+    what's shown matches the real final document exactly, not just a
+    3-row sample.
     """
     xlsx_path = UPLOADS_DIR / f"{session_id}.xlsx"
     if not xlsx_path.exists():
