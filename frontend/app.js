@@ -66,6 +66,7 @@ let selectedConfig = null; // full DocumentConfig of the chosen preset
 let columnMapping = {};    // { columnKey: excelHeader } — computed once on preset select, edited on page 3
 let customization = {};    // { columnKey: { label, widthPreset } }
 let manualColumns = [];    // [{ key, label }] — user-added, no Excel source
+let columnOrder = [];      // [columnKey, ...] — output order, reorderable via up/down buttons
 let manualColumnData = {}; // { columnKey: [value_per_item, ...] }, aligned to currentItems order
 let currentItems = null;   // cached full row list from /api/items, fetched lazily
 let manualColumnSeq = 0;   // for generating unique manual_N keys
@@ -469,7 +470,7 @@ function showMappingForm(config) {
     mappingList.appendChild(row);
   });
 
-  buildCustomizeSection(config);
+  initCustomizeSection(config);
   buildFilenameDefault(config);
   resultPanel.hidden = true;
   generateStatus.className = "status";
@@ -502,9 +503,11 @@ addColumnBtn.addEventListener("click", () => {
   const key = `manual_${++manualColumnSeq}`;
   manualColumns.push({ key, label });
   manualColumnData[key] = [];
+  customization[key] = { label, widthPreset: "medium" };
+  columnOrder.push(key);
   newColumnLabelInput.value = "";
   renderCustomColumnChips();
-  buildCustomizeSection(selectedConfig); // pick up the new column's width picker
+  renderCustomizeList(); // preserves existing label/width edits on other columns
   ensureItemsLoadedThenRenderTable();
   schedulePreview();
 });
@@ -520,8 +523,9 @@ function removeManualColumn(key) {
   manualColumns = manualColumns.filter((c) => c.key !== key);
   delete manualColumnData[key];
   delete customization[key];
+  columnOrder = columnOrder.filter((k) => k !== key);
   renderCustomColumnChips();
-  buildCustomizeSection(selectedConfig);
+  renderCustomizeList();
   renderDataEntryTable();
   schedulePreview();
 }
@@ -632,39 +636,82 @@ function closestWidthPreset(col) {
   return best;
 }
 
-function buildCustomizeSection(config) {
+function initCustomizeSection(config) {
+  // Called once per fresh preset selection — fully (re)establishes state.
+  // Adding/removing a manual column later uses renderCustomizeList() instead,
+  // which preserves whatever the user has already customized.
   docTitleInput.value = config.document_title;
   docTitleInput.oninput = () => schedulePreview();
 
   customization = {};
-  customizeList.innerHTML = "";
-
-  const allColumns = config.columns.concat(
-    manualColumns.map((mc) => ({
-      key: mc.key, label: mc.label, type: "text",
-      width_mode: "flex", flex_weight: 1.0, isManual: true,
-    }))
-  );
-
-  allColumns.forEach((col) => {
+  config.columns.forEach((col) => {
     customization[col.key] = {
       label: col.label,
       widthPreset: col.type === "text" ? closestWidthPreset(col) : null,
     };
+  });
+  columnOrder = config.columns.map((c) => c.key);
+
+  renderCustomizeList();
+}
+
+function getColumnByKey(key) {
+  const fromPreset = selectedConfig.columns.find((c) => c.key === key);
+  if (fromPreset) return fromPreset;
+  const manual = manualColumns.find((c) => c.key === key);
+  if (manual) return { key, label: manual.label, type: "text", width_mode: "flex", flex_weight: 1.0, isManual: true };
+  return null;
+}
+
+function moveColumn(key, direction) {
+  const idx = columnOrder.indexOf(key);
+  const newIdx = idx + direction;
+  if (idx === -1 || newIdx < 0 || newIdx >= columnOrder.length) return;
+  [columnOrder[idx], columnOrder[newIdx]] = [columnOrder[newIdx], columnOrder[idx]];
+  renderCustomizeList();
+  schedulePreview();
+}
+
+function renderCustomizeList() {
+  customizeList.innerHTML = "";
+
+  columnOrder.forEach((key, index) => {
+    const col = getColumnByKey(key);
+    if (!col) return; // defensive — shouldn't happen, but don't render a broken row
 
     const row = document.createElement("div");
     row.className = "customize-row";
 
+    const reorderBtns = document.createElement("div");
+    reorderBtns.className = "reorder-btns";
+    const upBtn = document.createElement("button");
+    upBtn.type = "button";
+    upBtn.className = "reorder-btn";
+    upBtn.innerHTML = "&#9650;";
+    upBtn.setAttribute("aria-label", `Move ${col.label} earlier`);
+    upBtn.disabled = index === 0;
+    upBtn.addEventListener("click", () => moveColumn(key, -1));
+    const downBtn = document.createElement("button");
+    downBtn.type = "button";
+    downBtn.className = "reorder-btn";
+    downBtn.innerHTML = "&#9660;";
+    downBtn.setAttribute("aria-label", `Move ${col.label} later`);
+    downBtn.disabled = index === columnOrder.length - 1;
+    downBtn.addEventListener("click", () => moveColumn(key, 1));
+    reorderBtns.appendChild(upBtn);
+    reorderBtns.appendChild(downBtn);
+    row.appendChild(reorderBtns);
+
     const labelInput = document.createElement("input");
     labelInput.type = "text";
     labelInput.className = "customize-row__label-input";
-    labelInput.value = col.label;
+    labelInput.value = customization[key]?.label ?? col.label;
     labelInput.setAttribute("aria-label", `Header text for ${col.label}`);
     labelInput.addEventListener("input", () => {
-      customization[col.key].label = labelInput.value;
+      customization[key].label = labelInput.value;
       if (col.isManual) {
         // keep the chip / data-entry table header in sync with the rename
-        const mc = manualColumns.find((c) => c.key === col.key);
+        const mc = manualColumns.find((c) => c.key === key);
         if (mc) mc.label = labelInput.value;
         renderCustomColumnChips();
         renderDataEntryTable();
@@ -680,9 +727,9 @@ function buildCustomizeSection(config) {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.textContent = WIDTH_PRESET_LABELS[presetKey];
-        btn.classList.toggle("is-selected", customization[col.key].widthPreset === presetKey);
+        btn.classList.toggle("is-selected", customization[key].widthPreset === presetKey);
         btn.addEventListener("click", () => {
-          customization[col.key].widthPreset = presetKey;
+          customization[key].widthPreset = presetKey;
           picker.querySelectorAll("button").forEach((b) => b.classList.remove("is-selected"));
           btn.classList.add("is-selected");
           schedulePreview();
@@ -703,14 +750,33 @@ function buildCustomizeSection(config) {
 
 function buildFinalConfig(opts) {
   const excludeManual = opts && opts.excludeManual;
-  const finalConfig = JSON.parse(JSON.stringify(selectedConfig));
-  finalConfig.document_title = docTitleInput.value || selectedConfig.document_title;
-  finalConfig.columns = finalConfig.columns.map((col) => {
-    const custom = customization[col.key] || {};
-    const updated = { ...col, label: custom.label || col.label };
-    if (col.type === "image") return updated;
+  const orderedKeys = excludeManual
+    ? columnOrder.filter((k) => !manualColumns.some((mc) => mc.key === k))
+    : columnOrder;
 
-    updated.source_header = columnMapping[col.key] || null;
+  const finalColumns = orderedKeys.map((key) => {
+    const col = getColumnByKey(key);
+    const custom = customization[key] || {};
+    const isManual = manualColumns.some((mc) => mc.key === key);
+
+    if (col.type === "image") {
+      return { ...col, label: custom.label || col.label };
+    }
+
+    if (isManual) {
+      return {
+        key,
+        label: custom.label || col.label,
+        type: "text",
+        source: "manual",
+        width_mode: "flex",
+        flex_weight: custom.widthPreset ? WIDTH_PRESETS[custom.widthPreset] : 1.0,
+        optional: true, // hide the column entirely if every row was left blank
+        align: "left",
+      };
+    }
+
+    const updated = { ...col, label: custom.label || col.label, source_header: columnMapping[key] || null };
     if (custom.widthPreset) {
       const widthMode = col.width_mode || "fixed";
       if (widthMode === "fixed") {
@@ -722,22 +788,9 @@ function buildFinalConfig(opts) {
     return updated;
   });
 
-  if (!excludeManual) {
-    manualColumns.forEach((mc) => {
-      const custom = customization[mc.key] || {};
-      finalConfig.columns.push({
-        key: mc.key,
-        label: custom.label || mc.label,
-        type: "text",
-        source: "manual",
-        width_mode: "flex",
-        flex_weight: custom.widthPreset ? WIDTH_PRESETS[custom.widthPreset] : 1.0,
-        optional: true, // hide the column entirely if every row was left blank
-        align: "left",
-      });
-    });
-  }
-
+  const finalConfig = JSON.parse(JSON.stringify(selectedConfig));
+  finalConfig.document_title = docTitleInput.value || selectedConfig.document_title;
+  finalConfig.columns = finalColumns;
   return finalConfig;
 }
 

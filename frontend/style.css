@@ -411,6 +411,34 @@ body {
   border: 1px solid var(--border);
   border-radius: 8px;
 }
+.reorder-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.reorder-btn {
+  width: 22px;
+  height: 18px;
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 4px;
+  font-size: 9px;
+  line-height: 1;
+  color: var(--text-mid);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.reorder-btn:hover:not(:disabled) {
+  border-color: var(--navy);
+  color: var(--navy);
+}
+.reorder-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
 .customize-row__label-input {
   flex: 1 1 160px;
   min-width: 140px;
