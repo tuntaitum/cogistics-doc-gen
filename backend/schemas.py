@@ -32,8 +32,14 @@ class ColumnConfig(BaseModel):
     label: str
     # "image" | "text"
     type: Literal["image", "text"] = "text"
-    # Which Excel header this pulls from. Not required for type="image"
-    # (images are matched by row position, same as today's floating-image logic).
+    # "excel" (default): value comes from a mapped spreadsheet column.
+    # "manual": value is typed in per-row by the user in the web UI at
+    # generation time — for data that doesn't exist in the source file at
+    # all (e.g. an employee manually assigning a Quantity per line item).
+    # Manual columns are always added ad-hoc per-generation by the user,
+    # never part of a saved template's default column list.
+    source: Literal["excel", "manual"] = "excel"
+    # Which Excel header this pulls from. Only meaningful when source="excel".
     # Left as None in the *template* until the user maps it during generation —
     # the template ships with a suggested/default value the user can override.
     source_header: Optional[str] = None

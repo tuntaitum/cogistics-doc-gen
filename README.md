@@ -78,7 +78,7 @@ Then open `http://127.0.0.1:8080`. It talks to the backend at `http://127.0.0.1:
 Three real pages with Back navigation:
 1. **Upload & check** — drag/drop `.xlsx`, detect headers, preview first rows, retry with a different header row.
 2. **Document type** — pick a template, see a live preview rendered from your actual data (auto-matched columns) before committing to it.
-3. **Map & generate** — reference table of your data alongside column-mapping dropdowns, header/width customization with live preview, a file name field, and Generate → Download.
+3. **Map & generate** — reference table of your data alongside column-mapping dropdowns, custom columns (add a field with no spreadsheet source and type in a value per row yourself, e.g. a manually-assigned Quantity), header/width customization with live preview, a file name field, and Generate → Download.
 
 ## How templates work
 

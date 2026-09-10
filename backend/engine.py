@@ -198,7 +198,7 @@ def read_excel(path: str, config: DocumentConfig, limit: int | None = None) -> l
 
     text_columns = [c for c in config.columns if c.type == "text"]
     for c in text_columns:
-        if c.source_header and c.source_header not in col:
+        if c.source == "excel" and c.source_header and c.source_header not in col:
             raise ValueError(
                 f"Column '{c.source_header}' (mapped to '{c.label}') not found. "
                 f"Found: {list(col.keys())}"
@@ -237,6 +237,13 @@ def read_excel(path: str, config: DocumentConfig, limit: int | None = None) -> l
 
         item = {}
         for c in text_columns:
+            if c.source == "manual":
+                # No spreadsheet value to read — filled in later via
+                # apply_manual_values() once the user has typed per-row values
+                # in the UI. Left empty here so a manual column behaves
+                # correctly (e.g. as "optional"/hideable) even if never filled.
+                item[c.key] = ""
+                continue
             idx = col.get(c.source_header)
             val = row[idx] if idx is not None else None
             item[c.key] = str(val).strip() if val not in (None, "") else ""
@@ -248,6 +255,21 @@ def read_excel(path: str, config: DocumentConfig, limit: int | None = None) -> l
 
     wb.close()
     return items
+
+
+def apply_manual_values(items: list[dict], manual_data: dict) -> None:
+    """
+    Merge user-typed-in-the-UI values for "manual" source columns into items,
+    in place. manual_data is {column_key: [value_for_item_0, value_for_item_1, ...]},
+    positionally aligned to the order read_excel() returned — stable across
+    calls for the same file+config since row selection doesn't depend on
+    column mapping. Missing/short arrays just leave those cells blank rather
+    than erroring, since manual entry is allowed to be incomplete.
+    """
+    for key, values in (manual_data or {}).items():
+        for i, item in enumerate(items):
+            if i < len(values) and values[i] is not None:
+                item[key] = str(values[i]).strip()
 
 
 # ─────────────────────────────────────────────

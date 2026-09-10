@@ -127,6 +127,25 @@
     </section>
 
     <section class="panel">
+      <h2 class="panel__title panel__title--sm">Custom columns</h2>
+      <p class="panel__hint">Add a column with no spreadsheet source — type a value in for each row yourself (e.g. a Quantity you assign manually).</p>
+
+      <ul class="chip-list chip-list--removable" id="custom-column-chips"></ul>
+
+      <div class="add-column-row">
+        <input type="text" id="new-column-label" class="field-row__input field-row__input--wide" placeholder="Column name, e.g. Quantity">
+        <button type="button" class="btn btn--ghost" id="add-column-btn">+ Add column</button>
+      </div>
+
+      <div class="data-entry-wrap" id="data-entry-wrap" hidden>
+        <p class="preview-table-label">Fill in a value for each row (leave blank if not needed)</p>
+        <div class="preview-table-scroll">
+          <table class="data-entry-table" id="data-entry-table"></table>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
       <h2 class="panel__title panel__title--sm">Customize headers &amp; column widths</h2>
 
       <div class="field-row">

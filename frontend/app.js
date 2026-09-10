@@ -35,6 +35,11 @@ const mappingHint = document.getElementById("mapping-hint");
 const mappingList = document.getElementById("mapping-list");
 const docTitleInput = document.getElementById("doc-title-input");
 const customizeList = document.getElementById("customize-list");
+const customColumnChips = document.getElementById("custom-column-chips");
+const newColumnLabelInput = document.getElementById("new-column-label");
+const addColumnBtn = document.getElementById("add-column-btn");
+const dataEntryWrap = document.getElementById("data-entry-wrap");
+const dataEntryTable = document.getElementById("data-entry-table");
 const previewFrame = document.getElementById("preview-frame");
 const previewFrameStatus = document.getElementById("preview-frame-status");
 const filenameInput = document.getElementById("filename-input");
@@ -60,6 +65,10 @@ let currentSession = null; // { session_id, filename, headers, preview_rows }
 let selectedConfig = null; // full DocumentConfig of the chosen preset
 let columnMapping = {};    // { columnKey: excelHeader } — computed once on preset select, edited on page 3
 let customization = {};    // { columnKey: { label, widthPreset } }
+let manualColumns = [];    // [{ key, label }] — user-added, no Excel source
+let manualColumnData = {}; // { columnKey: [value_per_item, ...] }, aligned to currentItems order
+let currentItems = null;   // cached full row list from /api/items, fetched lazily
+let manualColumnSeq = 0;   // for generating unique manual_N keys
 let previewDebounceTimer = null;
 let previewObjectUrl = null;
 let previewRequestSeq = 0;
@@ -128,6 +137,7 @@ function handleFileSelected(file) {
   dropzoneFilename.textContent = file.name;
   detectBtn.disabled = false;
   panelHeaders.hidden = true;
+  currentItems = null; // a new file invalidates any cached row list
 }
 
 // ---- Page 1: header detection ----
@@ -284,6 +294,9 @@ async function selectPreset(presetId, clickedBtn) {
     presetStatus.textContent = "";
     selectedConfig = config;
     computeAutoMapping(config);
+    manualColumns = [];
+    manualColumnData = {};
+    currentItems = null;
     panelPresetPreview.hidden = false;
     runPresetPreview();
   } catch (err) {
@@ -478,6 +491,128 @@ function updateGenerateAvailability() {
   generateBtn.disabled = !allRequiredMapped;
 }
 
+// ---- Page 3: custom (manually-entered) columns ----
+
+addColumnBtn.addEventListener("click", () => {
+  const label = newColumnLabelInput.value.trim();
+  if (!label) {
+    newColumnLabelInput.focus();
+    return;
+  }
+  const key = `manual_${++manualColumnSeq}`;
+  manualColumns.push({ key, label });
+  manualColumnData[key] = [];
+  newColumnLabelInput.value = "";
+  renderCustomColumnChips();
+  buildCustomizeSection(selectedConfig); // pick up the new column's width picker
+  ensureItemsLoadedThenRenderTable();
+  schedulePreview();
+});
+
+newColumnLabelInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    addColumnBtn.click();
+  }
+});
+
+function removeManualColumn(key) {
+  manualColumns = manualColumns.filter((c) => c.key !== key);
+  delete manualColumnData[key];
+  delete customization[key];
+  renderCustomColumnChips();
+  buildCustomizeSection(selectedConfig);
+  renderDataEntryTable();
+  schedulePreview();
+}
+
+function renderCustomColumnChips() {
+  customColumnChips.innerHTML = "";
+  manualColumns.forEach((col) => {
+    const li = document.createElement("li");
+    li.textContent = col.label;
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "chip-remove";
+    removeBtn.setAttribute("aria-label", `Remove ${col.label}`);
+    removeBtn.textContent = "×";
+    removeBtn.addEventListener("click", () => removeManualColumn(col.key));
+    li.appendChild(removeBtn);
+    customColumnChips.appendChild(li);
+  });
+}
+
+async function ensureItemsLoadedThenRenderTable() {
+  if (manualColumns.length === 0) {
+    dataEntryWrap.hidden = true;
+    return;
+  }
+  if (!currentItems) {
+    if (!(await loadCurrentItems())) return;
+  }
+  renderDataEntryTable();
+}
+
+async function loadCurrentItems() {
+  if (!currentSession || !selectedConfig) return false;
+  try {
+    const form = new FormData();
+    form.append("session_id", currentSession.session_id);
+    form.append("config_json", JSON.stringify(buildFinalConfig({ excludeManual: true })));
+    const res = await fetch(`${API_BASE}/api/items`, { method: "POST", body: form });
+    const data = await res.json();
+    if (!res.ok) {
+      showError(data.detail || "Couldn't load rows for custom columns.");
+      return false;
+    }
+    currentItems = data.items;
+    return true;
+  } catch (err) {
+    showError("Couldn't reach the server while loading rows.");
+    return false;
+  }
+}
+
+function renderDataEntryTable() {
+  if (manualColumns.length === 0 || !currentItems) {
+    dataEntryWrap.hidden = true;
+    return;
+  }
+  // Show one reference field (the emphasis/first text column) so people can
+  // tell which row they're filling in, plus one input column per manual field.
+  const refCol = selectedConfig.columns.find((c) => c.emphasis) || selectedConfig.columns.find((c) => c.type === "text");
+  const refKey = refCol ? refCol.key : null;
+
+  const headerCells = (refKey ? [`<th>${escapeHtml(refCol.label)}</th>`] : []).concat(
+    manualColumns.map((c) => `<th>${escapeHtml(c.label)}</th>`)
+  );
+
+  const rows = currentItems.map((item, rowIndex) => {
+    const refCell = refKey ? `<td>${escapeHtml(item[refKey] ?? "")}</td>` : "";
+    const inputCells = manualColumns
+      .map((c) => {
+        const val = manualColumnData[c.key]?.[rowIndex] ?? "";
+        return `<td><input type="text" value="${escapeHtml(val)}" data-col="${c.key}" data-row="${rowIndex}"></td>`;
+      })
+      .join("");
+    return `<tr>${refCell}${inputCells}</tr>`;
+  });
+
+  dataEntryTable.innerHTML =
+    `<thead><tr>${headerCells.join("")}</tr></thead><tbody>${rows.join("")}</tbody>`;
+
+  dataEntryTable.querySelectorAll("input").forEach((input) => {
+    input.addEventListener("input", () => {
+      const { col, row } = input.dataset;
+      if (!manualColumnData[col]) manualColumnData[col] = [];
+      manualColumnData[col][Number(row)] = input.value;
+      schedulePreview();
+    });
+  });
+
+  dataEntryWrap.hidden = false;
+}
+
 // ---- Page 3: customize headers & widths, with live preview ----
 
 function closestWidthPreset(col) {
@@ -504,7 +639,14 @@ function buildCustomizeSection(config) {
   customization = {};
   customizeList.innerHTML = "";
 
-  config.columns.forEach((col) => {
+  const allColumns = config.columns.concat(
+    manualColumns.map((mc) => ({
+      key: mc.key, label: mc.label, type: "text",
+      width_mode: "flex", flex_weight: 1.0, isManual: true,
+    }))
+  );
+
+  allColumns.forEach((col) => {
     customization[col.key] = {
       label: col.label,
       widthPreset: col.type === "text" ? closestWidthPreset(col) : null,
@@ -520,6 +662,13 @@ function buildCustomizeSection(config) {
     labelInput.setAttribute("aria-label", `Header text for ${col.label}`);
     labelInput.addEventListener("input", () => {
       customization[col.key].label = labelInput.value;
+      if (col.isManual) {
+        // keep the chip / data-entry table header in sync with the rename
+        const mc = manualColumns.find((c) => c.key === col.key);
+        if (mc) mc.label = labelInput.value;
+        renderCustomColumnChips();
+        renderDataEntryTable();
+      }
       schedulePreview();
     });
     row.appendChild(labelInput);
@@ -552,7 +701,8 @@ function buildCustomizeSection(config) {
   });
 }
 
-function buildFinalConfig() {
+function buildFinalConfig(opts) {
+  const excludeManual = opts && opts.excludeManual;
   const finalConfig = JSON.parse(JSON.stringify(selectedConfig));
   finalConfig.document_title = docTitleInput.value || selectedConfig.document_title;
   finalConfig.columns = finalConfig.columns.map((col) => {
@@ -571,7 +721,36 @@ function buildFinalConfig() {
     }
     return updated;
   });
+
+  if (!excludeManual) {
+    manualColumns.forEach((mc) => {
+      const custom = customization[mc.key] || {};
+      finalConfig.columns.push({
+        key: mc.key,
+        label: custom.label || mc.label,
+        type: "text",
+        source: "manual",
+        width_mode: "flex",
+        flex_weight: custom.widthPreset ? WIDTH_PRESETS[custom.widthPreset] : 1.0,
+        optional: true, // hide the column entirely if every row was left blank
+        align: "left",
+      });
+    });
+  }
+
   return finalConfig;
+}
+
+function buildManualDataPayload() {
+  // Trim to currentItems.length so a stale, longer array (e.g. after
+  // switching files) can't misalign with the real row count.
+  const count = currentItems ? currentItems.length : 0;
+  const payload = {};
+  manualColumns.forEach((mc) => {
+    const values = manualColumnData[mc.key] || [];
+    payload[mc.key] = Array.from({ length: count }, (_, i) => values[i] || "");
+  });
+  return payload;
 }
 
 function schedulePreview(immediate) {
@@ -593,6 +772,9 @@ async function runPreview() {
     const form = new FormData();
     form.append("session_id", currentSession.session_id);
     form.append("config_json", JSON.stringify(buildFinalConfig()));
+    if (manualColumns.length > 0) {
+      form.append("manual_data_json", JSON.stringify(buildManualDataPayload()));
+    }
     // No row_limit here — page 3's preview should show every item that will
     // actually be in the final PDF, not just a 3-row sample. Page 2's quick
     // preview (runPresetPreview) still caps at 3 for a fast first look.
@@ -643,6 +825,19 @@ generateBtn.addEventListener("click", () => generatePdf());
 async function generatePdf() {
   if (!selectedConfig || !currentSession) return;
 
+  if (manualColumns.length > 0 && !currentItems) {
+    // Safety net: normally items load as soon as a custom column is added,
+    // but don't silently generate with blank manual data if that hasn't
+    // finished for some reason.
+    generateStatus.className = "status is-loading";
+    generateStatus.textContent = "Preparing custom column data…";
+    if (!(await loadCurrentItems())) {
+      generateStatus.className = "status is-error";
+      generateStatus.textContent = "Couldn't load rows for your custom columns — try again.";
+      return;
+    }
+  }
+
   const finalConfig = buildFinalConfig();
 
   generateBtn.disabled = true;
@@ -654,6 +849,9 @@ async function generatePdf() {
     const form = new FormData();
     form.append("session_id", currentSession.session_id);
     form.append("config_json", JSON.stringify(finalConfig));
+    if (manualColumns.length > 0) {
+      form.append("manual_data_json", JSON.stringify(buildManualDataPayload()));
+    }
 
     const res = await fetch(`${API_BASE}/api/generate`, { method: "POST", body: form });
     const data = await res.json();

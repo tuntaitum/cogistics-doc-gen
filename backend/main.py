@@ -219,7 +219,7 @@ def _parse_and_validate_config(config_json: str) -> DocumentConfig:
 
     unmapped_required = [
         c.label for c in config.columns
-        if c.type == "text" and not c.optional and not c.source_header
+        if c.type == "text" and c.source == "excel" and not c.optional and not c.source_header
     ]
     if unmapped_required:
         raise HTTPException(
@@ -229,12 +229,25 @@ def _parse_and_validate_config(config_json: str) -> DocumentConfig:
     return config
 
 
-@app.post("/api/generate")
-def generate(session_id: str = Form(...), config_json: str = Form(...)):
+def _parse_manual_data(manual_data_json: Optional[str]) -> dict:
+    if not manual_data_json:
+        return {}
+    try:
+        data = json.loads(manual_data_json)
+    except json.JSONDecodeError:
+        raise HTTPException(400, "Invalid manual_data_json")
+    if not isinstance(data, dict) or not all(isinstance(v, list) for v in data.values()):
+        raise HTTPException(400, "manual_data_json must be an object of column_key -> list of values")
+    return data
+
+
+@app.post("/api/items")
+def get_items(session_id: str = Form(...), config_json: str = Form(...)):
     """
-    session_id: from /api/upload
-    config_json: the full DocumentConfig (preset + user's column mapping),
-                 serialized as a JSON string
+    Returns the matched rows as JSON (not a PDF) — powers the manual-column
+    data-entry table, which needs to show every row with an input per cell,
+    something a rendered PDF can't provide. Strips the raw image bytes
+    (not JSON-serializable) down to a simple has_image flag.
     """
     xlsx_path = UPLOADS_DIR / f"{session_id}.xlsx"
     if not xlsx_path.exists():
@@ -247,8 +260,40 @@ def generate(session_id: str = Form(...), config_json: str = Form(...)):
     except ValueError as e:
         raise HTTPException(400, str(e))
 
+    cleaned = []
+    for item in items:
+        row = {k: v for k, v in item.items() if k != "_image"}
+        row["_has_image"] = bool(item.get("_image"))
+        cleaned.append(row)
+
+    return {"items": cleaned, "item_count": len(cleaned)}
+
+
+@app.post("/api/generate")
+def generate(session_id: str = Form(...), config_json: str = Form(...), manual_data_json: Optional[str] = Form(None)):
+    """
+    session_id: from /api/upload
+    config_json: the full DocumentConfig (preset + user's column mapping),
+                 serialized as a JSON string
+    manual_data_json: optional {column_key: [value_per_row, ...]} for any
+                 "manual" source columns — see engine.apply_manual_values
+    """
+    xlsx_path = UPLOADS_DIR / f"{session_id}.xlsx"
+    if not xlsx_path.exists():
+        raise HTTPException(400, "Unknown session_id — please re-upload the file")
+
+    config = _parse_and_validate_config(config_json)
+    manual_data = _parse_manual_data(manual_data_json)
+
+    try:
+        items = engine.read_excel(str(xlsx_path), config)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
     if not items:
         raise HTTPException(400, "No rows matched — check the select column and value")
+
+    engine.apply_manual_values(items, manual_data)
 
     out_path = OUTPUT_DIR / f"{session_id}.pdf"
     engine.generate_pdf(items, config, str(out_path), str(ASSETS_DIR))
@@ -257,7 +302,12 @@ def generate(session_id: str = Form(...), config_json: str = Form(...)):
 
 
 @app.post("/api/preview")
-def preview(session_id: str = Form(...), config_json: str = Form(...), row_limit: Optional[int] = Form(None)):
+def preview(
+    session_id: str = Form(...),
+    config_json: str = Form(...),
+    row_limit: Optional[int] = Form(None),
+    manual_data_json: Optional[str] = Form(None),
+):
     """
     Renders a real PDF (same engine, same styling) and returns the bytes
     directly for inline display — not a download link. Deliberately the
@@ -274,11 +324,18 @@ def preview(session_id: str = Form(...), config_json: str = Form(...), row_limit
         raise HTTPException(400, "Unknown session_id — please re-upload the file")
 
     config = _parse_and_validate_config(config_json)
+    manual_data = _parse_manual_data(manual_data_json)
 
     try:
         items = engine.read_excel(str(xlsx_path), config, limit=row_limit)
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+    # manual_data is positioned against the FULL (untruncated) row order, so
+    # truncate it the same way row_limit truncated items, to keep alignment.
+    if row_limit is not None:
+        manual_data = {k: v[:row_limit] for k, v in manual_data.items()}
+    engine.apply_manual_values(items, manual_data)
 
     preview_path = OUTPUT_DIR / f"{session_id}_preview.pdf"
     engine.generate_pdf(items, config, str(preview_path), str(ASSETS_DIR))
