@@ -44,11 +44,13 @@ logger = logging.getLogger("codocuments")
 BASE_DIR = Path(__file__).parent
 PRESETS_DIR = BASE_DIR / "presets"
 ASSETS_DIR = BASE_DIR / "assets"
-UPLOADS_DIR = BASE_DIR / "uploads"
-OUTPUT_DIR = BASE_DIR / "output"
 
-UPLOADS_DIR.mkdir(exist_ok=True)
-OUTPUT_DIR.mkdir(exist_ok=True)
+DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR)))
+UPLOADS_DIR = DATA_DIR / "uploads"
+OUTPUT_DIR = DATA_DIR / "output"
+
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Uploads and generated PDFs are working files for an active session, not
 # permanent storage — once someone's downloaded their PDF, the app's job is
