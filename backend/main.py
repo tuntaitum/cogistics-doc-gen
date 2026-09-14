@@ -34,6 +34,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import ValidationError
+from fastapi.staticfiles import StaticFiles
 
 import engine
 from schemas import DocumentConfig
@@ -371,3 +372,6 @@ def download(session_id: str, filename: Optional[str] = None):
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+FRONTEND_DIR = BASE_DIR.parent / "frontend"
+app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
