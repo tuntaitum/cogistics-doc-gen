@@ -93,7 +93,7 @@
     <section class="panel" id="panel-preset-preview" hidden>
       <div class="preview-frame-wrap" id="preset-preview-frame-wrap">
         <div class="preview-frame-header">
-          <span>Preview with your data (auto-matched columns)</span>
+          <span>Example of this document type</span>
           <span class="preview-frame-status" id="preset-preview-status"></span>
         </div>
         <iframe class="preview-frame" id="preset-preview-frame" title="Document type preview"></iframe>
@@ -157,6 +157,14 @@
       </div>
 
       <div class="customize-list" id="customize-list"></div>
+
+      <div class="field-row field-row--stacked">
+        <label for="footer-notes-input" class="field-row__label">
+          Additional notes / terms (optional)
+          <span class="field-row__hint">Shown below the table — e.g. quotation conditions, delivery terms. Each line becomes its own line in the PDF.</span>
+        </label>
+        <textarea id="footer-notes-input" class="footer-notes-textarea" rows="4" placeholder="Quotation Conditions:&#10;1. Validity: Quotation valid for 7 days from issue date.&#10;2. Credit Term: 15 days."></textarea>
+      </div>
 
       <div class="preview-frame-wrap">
         <div class="preview-frame-header">

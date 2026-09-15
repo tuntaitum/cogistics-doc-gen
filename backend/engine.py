@@ -11,6 +11,7 @@ from __future__ import annotations  # lets `int | None` etc. work on Python < 3.
 
 import io
 import os
+from xml.sax.saxutils import escape as xml_escape
 import openpyxl
 from PIL import Image as PILImage
 from reportlab.lib.pagesizes import A4
@@ -74,7 +75,8 @@ PAGE_W, PAGE_H = A4
 MARGIN = 18 * mm
 THUMB_SIZE = 28 * mm
 PX_PER_EMU = 1 / 9525
-SIGNATURE_AREA_HEIGHT = 24 * mm  # reserved space above the footer bar, last page only
+SIGNATURE_AREA_HEIGHT = 46 * mm  # reserved space above the footer bar, last page only
+FOOTER_TOP_MM = 12.8             # 12mm background band + 0.8mm accent stripe
 
 
 # ─────────────────────────────────────────────
@@ -272,6 +274,52 @@ def apply_manual_values(items: list[dict], manual_data: dict) -> None:
                 item[key] = str(values[i]).strip()
 
 
+def _parse_number(raw) -> float | None:
+    """
+    Best-effort numeric parse for computed columns: strips currency symbols,
+    thousands separators, and whitespace. Returns None (not 0) for anything
+    that isn't really a number, so a computed cell can correctly stay blank
+    rather than silently showing a wrong "0".
+    """
+    if raw is None:
+        return None
+    s = str(raw).strip().replace(",", "")
+    if not s:
+        return None
+    # A price RANGE like "180-220" isn't a single number — computed columns
+    # need a clean numeric source column, not this kind of field.
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def apply_computed_values(items: list[dict], config: DocumentConfig) -> None:
+    """
+    Fills in "computed" source columns (e.g. Subtotal = Unit Price x Quantity)
+    by combining other columns' values on the same row, in place. A row
+    missing or with non-numeric operand values just gets a blank result for
+    that computed column, rather than raising — a quotation line without a
+    Quantity yet simply has no Subtotal until one's filled in.
+    """
+    computed_columns = [c for c in config.columns if c.source == "computed"]
+    for col in computed_columns:
+        for item in items:
+            values = [_parse_number(item.get(k)) for k in col.compute_operands]
+            if not values or any(v is None for v in values):
+                item[col.key] = ""
+                continue
+            result = values[0]
+            for v in values[1:]:
+                if col.compute_operation == "multiply":
+                    result *= v
+                elif col.compute_operation == "add":
+                    result += v
+                elif col.compute_operation == "subtract":
+                    result -= v
+            item[col.key] = f"{result:,.2f}"
+
+
 # ─────────────────────────────────────────────
 #  BRANDED CANVAS — same as original, reads from config.brand
 # ─────────────────────────────────────────────
@@ -334,7 +382,7 @@ def make_branded_canvas(config: DocumentConfig, assets_dir: str):
 
             if self._pageNumber == total:
                 for block in signature_blocks:
-                    self._draw_signature_block(block.labels)
+                    self._draw_signature_block(block.labels, block.include_date)
 
             self.setFillColor(c_light_bg)
             self.rect(0, 0, w, 12 * mm, fill=1, stroke=0)
@@ -346,24 +394,40 @@ def make_branded_canvas(config: DocumentConfig, assets_dir: str):
             self.drawString(MARGIN - 5 * mm, 4.5 * mm, f"{brand.company_name} --- {brand.tagline}")
             self.drawRightString(w - MARGIN + 5 * mm, 4.5 * mm, f"Page {self._pageNumber} of {total}")
 
-        def _draw_signature_block(self, labels):
+        def _draw_signature_block(self, labels, include_date=True):
+            """
+            Each party gets a signature line + label, with more breathing
+            room from the footer bar than before, plus an optional shorter
+            Date line beneath it (visually distinct — shorter and smaller
+            type — so it doesn't compete with the signature line itself).
+            """
             w, _ = A4
             n = len(labels)
             if n == 0:
                 return
             col_w = (w - 2 * MARGIN) / n
-            line_y = SIGNATURE_AREA_HEIGHT - 6 * mm
-            label_y = SIGNATURE_AREA_HEIGHT - 11 * mm
 
-            self.setFont(FONT_REGULAR, 8.5)
+            sig_line_y = (FOOTER_TOP_MM + 30) * mm
+            sig_label_y = (FOOTER_TOP_MM + 21) * mm
+            date_line_y = (FOOTER_TOP_MM + 13) * mm
+            date_label_y = (FOOTER_TOP_MM + 8) * mm
+
             for i, label in enumerate(labels):
                 x0 = MARGIN + i * col_w
-                line_width = col_w * 0.72
+                sig_line_width = col_w * 0.72
+                date_line_width = col_w * 0.38
+
                 self.setStrokeColor(c_accent)
                 self.setLineWidth(0.75)
-                self.line(x0, line_y, x0 + line_width, line_y)
+                self.line(x0, sig_line_y, x0 + sig_line_width, sig_line_y)
+                self.setFont(FONT_REGULAR, 8.5)
                 self.setFillColor(c_mid)
-                self.drawString(x0, label_y, label)
+                self.drawString(x0, sig_label_y, label)
+
+                if include_date:
+                    self.line(x0, date_line_y, x0 + date_line_width, date_line_y)
+                    self.setFont(FONT_REGULAR, 7.5)
+                    self.drawString(x0, date_label_y, "Date")
 
     return BrandedCanvas
 
@@ -453,8 +517,32 @@ def build_table(items: list[dict], config: DocumentConfig, styles: dict,
 
     has_image = any(c.type == "image" for c in active_columns)
     row_h = (THUMB_SIZE + 4 * mm) if has_image else 10 * mm
+    row_heights = [10 * mm] + [row_h] * len(items)
 
-    t = Table(data, colWidths=col_widths, rowHeights=[10 * mm] + [row_h] * len(items))
+    extra_style_commands = []
+    totals_col_idx = next((i for i, c in enumerate(active_columns) if c.key == config.totals_column), None)
+    if totals_col_idx is not None:
+        total = sum(
+            (v for v in (_parse_number(item.get(config.totals_column)) for item in items) if v is not None)
+        )
+        totals_row = [""] * len(active_columns)
+        totals_row[totals_col_idx] = Paragraph(f"{total:,.2f}", styles["totals_value"])
+        if totals_col_idx > 0:
+            totals_row[0] = Paragraph(config.totals_label, styles["totals_label"])
+        data.append(totals_row)
+        row_heights.append(10 * mm)
+
+        totals_row_idx = len(data) - 1
+        extra_style_commands = [
+            ("SPAN", (0, totals_row_idx), (totals_col_idx - 1, totals_row_idx)) if totals_col_idx > 0 else None,
+            ("LINEABOVE", (0, totals_row_idx), (-1, totals_row_idx), 1, c_primary),
+            ("ALIGN", (0, totals_row_idx), (0, totals_row_idx), "RIGHT" if totals_col_idx > 0 else "CENTER"),
+            ("TOPPADDING", (0, totals_row_idx), (-1, totals_row_idx), 6),
+            ("BOTTOMPADDING", (0, totals_row_idx), (-1, totals_row_idx), 6),
+        ]
+        extra_style_commands = [cmd for cmd in extra_style_commands if cmd is not None]
+
+    t = Table(data, colWidths=col_widths, rowHeights=row_heights)
     t.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), c_primary),
         ("ALIGN", (0, 0), (-1, 0), "CENTER"),
@@ -470,7 +558,7 @@ def build_table(items: list[dict], config: DocumentConfig, styles: dict,
         ("LINEAFTER", (0, 0), (-2, -1), 0.5, HexColor("#CCCCCC")),
         ("LINEBEFORE", (0, 0), (0, -1), 3, c_accent),
         ("BOX", (0, 0), (-1, -1), 1, c_primary),
-    ]))
+    ] + extra_style_commands))
     return t
 
 
@@ -488,8 +576,13 @@ def build_footer_blocks(config: DocumentConfig, styles: dict, c_mid, c_dark):
     flowables = []
     for block in config.footer_blocks:
         if block.type == "text" and block.text:
+            # Escape any XML-special characters BEFORE inserting our own
+            # <br/> tags, so a literal "<" or "&" the user types can't break
+            # reportlab's mini-markup parser or get mistaken for real markup.
+            escaped = xml_escape(block.text)
+            html_text = escaped.replace("\r\n", "\n").replace("\n", "<br/>")
             flowables.append(Spacer(1, 8 * mm))
-            flowables.append(Paragraph(block.text, styles["intro"]))
+            flowables.append(Paragraph(html_text, styles["footer_notes"]))
     return flowables
 
 
@@ -514,6 +607,12 @@ def make_styles(c_dark, c_mid, c_white, c_primary):
         "intro": ParagraphStyle("Intro", fontName=FONT_REGULAR,
                                  fontSize=9, textColor=c_mid, spaceAfter=13,
                                  leftIndent=-(7 * mm)),
+        "totals_label": ParagraphStyle("TotalsLabel", fontName=FONT_BOLD,
+                                        fontSize=9, textColor=c_dark, alignment=TA_CENTER),
+        "totals_value": ParagraphStyle("TotalsValue", fontName=FONT_BOLD,
+                                        fontSize=9.5, textColor=c_primary, alignment=TA_CENTER),
+        "footer_notes": ParagraphStyle("FooterNotes", fontName=FONT_REGULAR,
+                                        fontSize=8, textColor=c_mid, leading=12),
     }
 
 

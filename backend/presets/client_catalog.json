@@ -1,6 +1,6 @@
 {
   "id": "client_catalog",
-  "name": "Client Product Catalog",
+  "name": "Product Suggestions Catalog",
   "document_title": "Product Suggestions Catalog",
   "intro_text_template": "This catalog lists {count} product(s) with specifications.",
   "header_row": 2,

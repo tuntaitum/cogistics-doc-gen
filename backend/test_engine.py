@@ -55,7 +55,7 @@ def build_quotation_xlsx(path):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.append(["-- title row --"])
-    ws.append(["Select", "Item Name", "Quantity", "Unit Price", "Remarks"])
+    ws.append(["Select", "Product Name", "Quantity", "Price Range (THB/kg)", "Remarks"])
     rows = [
         ["Yes", "Cardboard Box (M)", "500", "12.50", "Bulk discount applied"],
         ["Yes", "Pallet Wrap", "50", "45.00", ""],
@@ -136,7 +136,7 @@ def test_signature_only_on_last_page():
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.append(["title"])
-    ws.append(["Select", "Item Name", "Quantity", "Unit Price", "Remarks"])
+    ws.append(["Select", "Product Name", "Quantity", "Price Range (THB/kg)", "Remarks"])
     for i in range(40):  # enough rows to force multiple pages
         ws.append(["Yes", f"Item {i+1:02d}", str(10 * (i + 1)), f"{5.5+i}", "remark"])
     wb.save(xlsx_path)
@@ -203,10 +203,53 @@ def test_thai_text_renders():
     print("PASS: Thai text extracted correctly from the generated PDF")
 
 
+def test_quotation_subtotal_and_total():
+    """
+    Regression test: quotation_sheet's Subtotal column (Unit Price x Quantity)
+    and the grand Total row must compute correctly, and a row with a missing
+    operand (no Quantity) should get a blank Subtotal rather than crashing
+    or silently defaulting to 0.
+    """
+    print("\n=== quotation_subtotal_and_total (regression) ===")
+    with open(os.path.join(HERE, "presets", "quotation_sheet.json")) as f:
+        raw = json.load(f)
+    for col in raw["columns"]:
+        if col["key"] == "qty":
+            col["source_header"] = "Quantity"  # map it, as the UI would require
+    config = DocumentConfig(**raw)
+
+    xlsx_path = os.path.join(OUT, "subtotal_regression_input.xlsx")
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["title"])
+    ws.append(["Select", "Product Name", "Price Range (THB/kg)", "Quantity", "Remarks"])
+    ws.append(["Yes", "Box", "12.50", "500", ""])       # 12.50 * 500 = 6250.00
+    ws.append(["Yes", "Wrap", "45.00", "50", ""])        # 45.00 * 50 = 2250.00
+    ws.append(["Yes", "No-Qty Item", "10.00", "", ""])   # missing Quantity -> blank subtotal
+    wb.save(xlsx_path)
+
+    items = engine.read_excel(xlsx_path, config)
+    engine.apply_computed_values(items, config)
+
+    print(f"Items: {items}")
+    assert items[0]["subtotal"] == "6,250.00", f"Expected 6,250.00, got {items[0]['subtotal']!r}"
+    assert items[1]["subtotal"] == "2,250.00", f"Expected 2,250.00, got {items[1]['subtotal']!r}"
+    assert items[2]["subtotal"] == "", f"Expected blank subtotal for missing Quantity, got {items[2]['subtotal']!r}"
+
+    out_pdf = os.path.join(OUT, "subtotal_regression_output.pdf")
+    engine.generate_pdf(items, config, out_pdf, ASSETS)
+
+    import subprocess
+    result = subprocess.run(["pdftotext", "-layout", out_pdf, "-"], capture_output=True, text=True)
+    assert "8,500.00" in result.stdout, f"Expected grand total 8,500.00 in output, got: {result.stdout!r}"
+    print("PASS: Subtotal math and grand Total both correct")
+
+
 if __name__ == "__main__":
     run_case("client_catalog", build_client_catalog_xlsx, "client_catalog.json")
     run_case("quotation_sheet", build_quotation_xlsx, "quotation_sheet.json")
     test_truncated_dimension_metadata()
     test_signature_only_on_last_page()
     test_thai_text_renders()
+    test_quotation_subtotal_and_total()
     print("\nAll cases passed.")

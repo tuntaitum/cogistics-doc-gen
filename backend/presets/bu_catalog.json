@@ -10,10 +10,10 @@
   "image_skip_columns": [5],
   "columns": [
     { "key": "photo", "label": "Photo", "type": "image", "width_mm": 32 },
-    { "key": "name", "label": "Item Name", "type": "text", "source_header": "Item Name", "width_mode": "flex", "flex_weight": 1.0, "emphasis": true },
-    { "key": "dim", "label": "Pack Size", "type": "text", "source_header": "Pack Size", "width_mm": 25 },
+    { "key": "name", "label": "Item Name", "type": "text", "source_header": "Product Name", "width_mode": "flex", "flex_weight": 1.0, "emphasis": true },
+    { "key": "dim", "label": "Pack Size", "type": "text", "source_header": "Pack Size", "width_mm": 25, "optional": true },
     { "key": "certificates", "label": "Certifications", "type": "text", "source_header": "Certifications", "width_mode": "flex", "flex_weight": 0.8, "optional": true },
-    { "key": "description", "label": "Description", "type": "text", "source_header": "Description", "width_mode": "flex", "flex_weight": 1.0, "optional": true }
+    { "key": "description", "label": "Description", "type": "text", "source_header": "Supply Advantage", "width_mode": "flex", "flex_weight": 1.0 }
   ],
   "footer_blocks": [],
   "brand": {

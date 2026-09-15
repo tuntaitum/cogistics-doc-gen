@@ -1,4 +1,4 @@
-const API_BASE = window.CODOCS_API_BASE || "";
+const API_BASE = window.CODOCS_API_BASE || "http://127.0.0.1:8000";
 
 // ---- Element refs ----
 
@@ -34,6 +34,7 @@ const mappingReferenceTable = document.getElementById("mapping-reference-table")
 const mappingHint = document.getElementById("mapping-hint");
 const mappingList = document.getElementById("mapping-list");
 const docTitleInput = document.getElementById("doc-title-input");
+const footerNotesInput = document.getElementById("footer-notes-input");
 const customizeList = document.getElementById("customize-list");
 const customColumnChips = document.getElementById("custom-column-chips");
 const newColumnLabelInput = document.getElementById("new-column-label");
@@ -73,8 +74,6 @@ let manualColumnSeq = 0;   // for generating unique manual_N keys
 let previewDebounceTimer = null;
 let previewObjectUrl = null;
 let previewRequestSeq = 0;
-let presetPreviewObjectUrl = null;
-let presetPreviewSeq = 0;
 
 // ---- Page navigation ----
 
@@ -281,7 +280,6 @@ async function selectPreset(presetId, clickedBtn) {
   presetStatus.className = "status is-loading";
   presetStatus.textContent = "Loading template…";
   panelPresetPreview.hidden = true;
-  clearPresetPreviewFrame(); // always start clean — never let a previous preset's preview linger
 
   try {
     const res = await fetch(`${API_BASE}/api/presets/${presetId}`);
@@ -299,7 +297,7 @@ async function selectPreset(presetId, clickedBtn) {
     manualColumnData = {};
     currentItems = null;
     panelPresetPreview.hidden = false;
-    runPresetPreview();
+    showExample(presetId);
   } catch (err) {
     presetStatus.className = "status is-error";
     presetStatus.textContent = "Couldn't reach the server.";
@@ -309,7 +307,7 @@ async function selectPreset(presetId, clickedBtn) {
 function computeAutoMapping(config) {
   columnMapping = {};
   config.columns.forEach((col) => {
-    if (col.type === "image") return;
+    if (col.type === "image" || col.source === "computed") return;
     columnMapping[col.key] = findBestHeaderMatch(col.source_header, currentSession.headers) || "";
   });
 }
@@ -322,85 +320,25 @@ function findBestHeaderMatch(suggestedHeader, actualHeaders) {
   return loose || null;
 }
 
-function unmatchedRequiredLabels(config) {
-  return config.columns
-    .filter((c) => c.type === "text" && !c.optional && !columnMapping[c.key])
-    .map((c) => c.label);
-}
-
-function clearPresetPreviewFrame() {
-  if (presetPreviewObjectUrl) {
-    URL.revokeObjectURL(presetPreviewObjectUrl);
-    presetPreviewObjectUrl = null;
-  }
-  presetPreviewFrame.src = "about:blank";
-}
-
-function showPresetPreviewError(message) {
-  clearPresetPreviewFrame();
-  presetPreviewFrameWrap.hidden = true;
-  presetPreviewError.hidden = false;
-  presetPreviewError.className = "status is-error";
-  presetPreviewError.textContent = message;
-}
-
-async function runPresetPreview() {
-  if (!selectedConfig || !currentSession) return;
-  const mySeq = ++presetPreviewSeq;
-
-  presetPreviewFrameWrap.hidden = false;
+function showExample(presetId) {
+  // A static, pre-built sample PDF — not a live preview against the user's
+  // actual uploaded data. A live auto-matched preview breaks down whenever
+  // a preset's expected columns don't happen to match what was uploaded
+  // (true most of the time for anything but an exact-fit file), so this is
+  // both more reliable and a truer "here's what this template produces"
+  // reference than attempting live generation at this stage ever was.
+  presetPreviewStatus.textContent = "";
   presetPreviewError.hidden = true;
-  presetPreviewStatus.textContent = "Loading preview…";
-
-  // Check required-field matching client-side first, rather than letting the
-  // API reject it: gives a clearer, purpose-specific message and avoids
-  // showing a stale iframe if the request fails for an unrelated reason.
-  const missing = unmatchedRequiredLabels(selectedConfig);
-  if (missing.length > 0) {
-    showPresetPreviewError(
-      `Can't preview yet — ${missing.join(", ")} didn't auto-match a column in your file. ` +
-      `You'll map ${missing.length === 1 ? "it" : "them"} manually on the next page.`
-    );
-    return;
-  }
-
-  const previewConfig = JSON.parse(JSON.stringify(selectedConfig));
-  previewConfig.columns = previewConfig.columns.map((col) => {
-    if (col.type === "image") return col;
-    return { ...col, source_header: columnMapping[col.key] || null };
-  });
-
-  try {
-    const form = new FormData();
-    form.append("session_id", currentSession.session_id);
-    form.append("config_json", JSON.stringify(previewConfig));
-    form.append("row_limit", "3");
-
-    const res = await fetch(`${API_BASE}/api/preview`, { method: "POST", body: form });
-    if (mySeq !== presetPreviewSeq) return;
-
-    if (!res.ok) {
-      let message = "Couldn't generate a preview — you can still continue and map columns manually.";
-      try {
-        const data = await res.json();
-        message = data.detail || message;
-      } catch (_) {}
-      showPresetPreviewError(message);
-      return;
-    }
-
-    const blob = await res.blob();
-    if (mySeq !== presetPreviewSeq) return;
-
-    if (presetPreviewObjectUrl) URL.revokeObjectURL(presetPreviewObjectUrl);
-    presetPreviewObjectUrl = URL.createObjectURL(blob);
-    presetPreviewFrame.src = presetPreviewObjectUrl;
-    presetPreviewStatus.textContent = "";
-  } catch (err) {
-    if (mySeq === presetPreviewSeq) {
-      showPresetPreviewError("Couldn't reach the server — you can still continue.");
-    }
-  }
+  presetPreviewFrameWrap.hidden = false;
+  // Cache-bust with the preset id so switching presets always shows the
+  // right file even if the browser aggressively caches iframe src changes.
+  presetPreviewFrame.src = `${API_BASE}/api/presets/${presetId}/example?_=${presetId}`;
+  presetPreviewFrame.onerror = () => {
+    presetPreviewFrameWrap.hidden = true;
+    presetPreviewError.hidden = false;
+    presetPreviewError.className = "status";
+    presetPreviewError.textContent = "No example available for this document type yet.";
+  };
 }
 
 continueToMappingBtn.addEventListener("click", () => {
@@ -425,6 +363,21 @@ function showMappingForm(config) {
       row.innerHTML = `
         <span class="mapping-row__label">${escapeHtml(col.label)}</span>
         <span class="mapping-row__note">Matched automatically from the file's embedded photos</span>
+      `;
+      mappingList.appendChild(row);
+      return;
+    }
+
+    if (col.source === "computed") {
+      const opLabel = { multiply: "×", add: "+", subtract: "−" }[col.compute_operation] || col.compute_operation;
+      const operandLabels = col.compute_operands
+        .map((key) => config.columns.find((c) => c.key === key)?.label || key)
+        .join(` ${opLabel} `);
+      const row = document.createElement("div");
+      row.className = "mapping-row mapping-row--image"; // reuse the same "no dropdown" layout
+      row.innerHTML = `
+        <span class="mapping-row__label">${escapeHtml(col.label)}</span>
+        <span class="mapping-row__note">Calculated automatically (${escapeHtml(operandLabels)})</span>
       `;
       mappingList.appendChild(row);
       return;
@@ -643,6 +596,10 @@ function initCustomizeSection(config) {
   docTitleInput.value = config.document_title;
   docTitleInput.oninput = () => schedulePreview();
 
+  const existingTextBlock = (config.footer_blocks || []).find((b) => b.type === "text");
+  footerNotesInput.value = existingTextBlock ? existingTextBlock.text : "";
+  footerNotesInput.oninput = () => schedulePreview();
+
   customization = {};
   config.columns.forEach((col) => {
     customization[col.key] = {
@@ -774,6 +731,16 @@ function buildFinalConfig(opts) {
         optional: true, // hide the column entirely if every row was left blank
         align: "left",
       };
+    }
+
+    if (col.source === "computed") {
+      const updated = { ...col, label: custom.label || col.label };
+      if (custom.widthPreset) {
+        const widthMode = col.width_mode || "fixed";
+        if (widthMode === "fixed") updated.width_mm = WIDTH_PRESETS_MM[custom.widthPreset];
+        else updated.flex_weight = WIDTH_PRESETS[custom.widthPreset];
+      }
+      return updated; // source_header intentionally untouched — computed columns don't map to a file column
     }
 
     const updated = { ...col, label: custom.label || col.label, source_header: columnMapping[key] || null };

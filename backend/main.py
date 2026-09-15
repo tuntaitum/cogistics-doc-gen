@@ -43,6 +43,9 @@ logger = logging.getLogger("codocuments")
 
 BASE_DIR = Path(__file__).parent
 PRESETS_DIR = BASE_DIR / "presets"
+# Example PDFs ship with the code (not user data), so these live under
+# BASE_DIR alongside presets rather than in the Railway volume.
+EXAMPLES_DIR = BASE_DIR / "presets" / "examples"
 ASSETS_DIR = BASE_DIR / "assets"
 
 DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR)))
@@ -191,6 +194,25 @@ def get_preset(preset_id: str):
     return config.model_dump()
 
 
+@app.get("/api/presets/{preset_id}/example")
+def get_preset_example(preset_id: str):
+    """
+    Serves a pre-generated sample PDF showing what this document type
+    actually looks like, built from realistic sample data through the real
+    engine — not a live preview against whatever the user happens to have
+    uploaded. A live auto-matched preview breaks down whenever a preset's
+    column headers don't happen to match the uploaded file (which is most
+    of the time for anything other than the exact matching template), so a
+    static example is both more reliable and a truer "here's what this
+    template produces" reference.
+    """
+    _preset_path(preset_id)  # validates preset_id format the same way other routes do
+    path = EXAMPLES_DIR / f"{preset_id}.pdf"
+    if not path.exists():
+        raise HTTPException(404, "No example available for this document type yet")
+    return FileResponse(path, media_type="application/pdf")
+
+
 @app.put("/api/presets/{preset_id}")
 def save_preset(preset_id: str, config: DocumentConfig):
     if config.id != preset_id:
@@ -297,6 +319,7 @@ def generate(session_id: str = Form(...), config_json: str = Form(...), manual_d
         raise HTTPException(400, "No rows matched — check the select column and value")
 
     engine.apply_manual_values(items, manual_data)
+    engine.apply_computed_values(items, config)
 
     out_path = OUTPUT_DIR / f"{session_id}.pdf"
     engine.generate_pdf(items, config, str(out_path), str(ASSETS_DIR))
@@ -339,6 +362,7 @@ def preview(
     if row_limit is not None:
         manual_data = {k: v[:row_limit] for k, v in manual_data.items()}
     engine.apply_manual_values(items, manual_data)
+    engine.apply_computed_values(items, config)
 
     preview_path = OUTPUT_DIR / f"{session_id}_preview.pdf"
     engine.generate_pdf(items, config, str(preview_path), str(ASSETS_DIR))

@@ -38,11 +38,21 @@ class ColumnConfig(BaseModel):
     # all (e.g. an employee manually assigning a Quantity per line item).
     # Manual columns are always added ad-hoc per-generation by the user,
     # never part of a saved template's default column list.
-    source: Literal["excel", "manual"] = "excel"
+    # "computed": value is calculated from other columns in the same row
+    # (e.g. a Subtotal = Unit Price x Quantity) — see compute_operation /
+    # compute_operands below.
+    source: Literal["excel", "manual", "computed"] = "excel"
     # Which Excel header this pulls from. Only meaningful when source="excel".
     # Left as None in the *template* until the user maps it during generation —
     # the template ships with a suggested/default value the user can override.
     source_header: Optional[str] = None
+    # Only meaningful when source="computed". "multiply"/"add"/"subtract"
+    # applied left-to-right across compute_operands (column keys, evaluated
+    # after excel/manual values are all in place). Non-numeric or missing
+    # operand values make the result blank for that row rather than erroring
+    # — a quotation row missing a Quantity just has no Subtotal, not a crash.
+    compute_operation: Literal["multiply", "add", "subtract"] = "multiply"
+    compute_operands: list[str] = Field(default_factory=list)
     # Fixed width in mm. Ignored if width_mode="flex".
     width_mm: Optional[float] = None
     # "fixed" uses width_mm. "flex" splits remaining space proportionally
@@ -58,14 +68,20 @@ class ColumnConfig(BaseModel):
 
 
 class FooterBlock(BaseModel):
-    # "signature" is the first supported block (for quotation sheets).
-    # More block types (terms text, totals, etc.) can be added later
-    # without touching the engine's core loop.
+    # "signature": a fixed block pinned to the bottom of the last page only.
+    # "text": free-form notes/terms, flows normally after the table (e.g.
+    # numbered quotation conditions) — available on every document type,
+    # not just quotation sheets.
     type: Literal["signature", "text"]
-    # For type="text": the text to render.
+    # For type="text": the text to render. Plain text with real line breaks —
+    # the engine converts them to proper PDF line breaks and escapes any
+    # special characters, so no markup knowledge is needed to use this.
     text: Optional[str] = None
     # For type="signature": labels for each signature slot.
     labels: list[str] = Field(default_factory=lambda: ["Prepared by", "Approved by"])
+    # For type="signature": if true, also draw a shorter "Date" line beneath
+    # each signature line for that party.
+    include_date: bool = True
 
 
 class DocumentConfig(BaseModel):
@@ -87,11 +103,18 @@ class DocumentConfig(BaseModel):
     footer_blocks: list[FooterBlock] = Field(default_factory=list)
     brand: BrandConfig = Field(default_factory=BrandConfig)
 
+    # If set, the table gets an extra summary row at the very bottom summing
+    # this column (by key) across all rows — e.g. a quotation's grand Total
+    # under a Subtotal column. Non-numeric values are skipped when summing
+    # rather than erroring.
+    totals_column: Optional[str] = None
+    totals_label: str = "Total"
+
     class Config:
         json_schema_extra = {
             "example": {
                 "id": "client_catalog",
-                "name": "Client Product Catalog",
+                "name": "Product Suggestions Catalog",
                 "document_title": "Product Suggestions Catalog",
             }
         }
