@@ -307,7 +307,7 @@ async function selectPreset(presetId, clickedBtn) {
 function computeAutoMapping(config) {
   columnMapping = {};
   config.columns.forEach((col) => {
-    if (col.type === "image" || col.source === "computed") return;
+    if (col.type === "image" || col.source === "computed" || col.source === "manual") return;
     columnMapping[col.key] = findBestHeaderMatch(col.source_header, currentSession.headers) || "";
   });
 }
@@ -383,6 +383,17 @@ function showMappingForm(config) {
       return;
     }
 
+    if (col.source === "manual") {
+      const row = document.createElement("div");
+      row.className = "mapping-row mapping-row--image"; // reuse the same "no dropdown" layout
+      row.innerHTML = `
+        <span class="mapping-row__label">${escapeHtml(col.label)}${col.optional ? ` <span class="mapping-row__optional-tag">optional</span>` : ""}</span>
+        <span class="mapping-row__note">Typed in per row below, under Custom columns</span>
+      `;
+      mappingList.appendChild(row);
+      return;
+    }
+
     const row = document.createElement("div");
     row.className = "mapping-row";
 
@@ -425,6 +436,8 @@ function showMappingForm(config) {
 
   initCustomizeSection(config);
   buildFilenameDefault(config);
+  renderCustomColumnChips();
+  ensureItemsLoadedThenRenderTable(); // preset-defined manual columns need the entry table right away
   resultPanel.hidden = true;
   generateStatus.className = "status";
   generateStatus.textContent = "";
@@ -500,7 +513,7 @@ function renderCustomColumnChips() {
 }
 
 async function ensureItemsLoadedThenRenderTable() {
-  if (manualColumns.length === 0) {
+  if (getManualColumns().length === 0) {
     dataEntryWrap.hidden = true;
     return;
   }
@@ -531,22 +544,25 @@ async function loadCurrentItems() {
 }
 
 function renderDataEntryTable() {
-  if (manualColumns.length === 0 || !currentItems) {
+  const cols = getManualColumns();
+  if (cols.length === 0 || !currentItems) {
     dataEntryWrap.hidden = true;
     return;
   }
-  // Show one reference field (the emphasis/first text column) so people can
-  // tell which row they're filling in, plus one input column per manual field.
-  const refCol = selectedConfig.columns.find((c) => c.emphasis) || selectedConfig.columns.find((c) => c.type === "text");
+  // Show one reference field (the emphasis/first mapped text column) so people
+  // can tell which row they're filling in, plus one input per manual field.
+  const refCol =
+    selectedConfig.columns.find((c) => c.emphasis && c.source !== "manual") ||
+    selectedConfig.columns.find((c) => c.type === "text" && c.source !== "manual");
   const refKey = refCol ? refCol.key : null;
 
   const headerCells = (refKey ? [`<th>${escapeHtml(refCol.label)}</th>`] : []).concat(
-    manualColumns.map((c) => `<th>${escapeHtml(c.label)}</th>`)
+    cols.map((c) => `<th>${escapeHtml(c.label)}</th>`)
   );
 
   const rows = currentItems.map((item, rowIndex) => {
     const refCell = refKey ? `<td>${escapeHtml(item[refKey] ?? "")}</td>` : "";
-    const inputCells = manualColumns
+    const inputCells = cols
       .map((c) => {
         const val = manualColumnData[c.key]?.[rowIndex] ?? "";
         return `<td><input type="text" value="${escapeHtml(val)}" data-col="${c.key}" data-row="${rowIndex}"></td>`;
@@ -714,13 +730,13 @@ function buildFinalConfig(opts) {
   const finalColumns = orderedKeys.map((key) => {
     const col = getColumnByKey(key);
     const custom = customization[key] || {};
-    const isManual = manualColumns.some((mc) => mc.key === key);
+    const isUserAddedManual = manualColumns.some((mc) => mc.key === key);
 
     if (col.type === "image") {
       return { ...col, label: custom.label || col.label };
     }
 
-    if (isManual) {
+    if (isUserAddedManual) {
       return {
         key,
         label: custom.label || col.label,
@@ -733,14 +749,17 @@ function buildFinalConfig(opts) {
       };
     }
 
-    if (col.source === "computed") {
+    // Preset-defined manual or computed columns: keep their own definition,
+    // only apply label/width overrides. Neither maps to a spreadsheet column,
+    // so source_header is deliberately left untouched.
+    if (col.source === "manual" || col.source === "computed") {
       const updated = { ...col, label: custom.label || col.label };
       if (custom.widthPreset) {
         const widthMode = col.width_mode || "fixed";
         if (widthMode === "fixed") updated.width_mm = WIDTH_PRESETS_MM[custom.widthPreset];
         else updated.flex_weight = WIDTH_PRESETS[custom.widthPreset];
       }
-      return updated; // source_header intentionally untouched — computed columns don't map to a file column
+      return updated;
     }
 
     const updated = { ...col, label: custom.label || col.label, source_header: columnMapping[key] || null };
@@ -758,7 +777,36 @@ function buildFinalConfig(opts) {
   const finalConfig = JSON.parse(JSON.stringify(selectedConfig));
   finalConfig.document_title = docTitleInput.value || selectedConfig.document_title;
   finalConfig.columns = finalColumns;
+
+  // Merge the "Additional notes / terms" textarea into footer_blocks. Keep any
+  // non-text blocks (e.g. the quotation's signature block) exactly as the
+  // preset defined them, and replace/drop the single text block to match
+  // whatever is currently in the textarea.
+  const notes = (footerNotesInput.value || "").trim();
+  const nonTextBlocks = (finalConfig.footer_blocks || []).filter((b) => b.type !== "text");
+  finalConfig.footer_blocks = notes
+    ? [{ type: "text", text: notes }, ...nonTextBlocks]
+    : nonTextBlocks;
+
   return finalConfig;
+}
+
+/**
+ * Every column the user types values into row-by-row: those defined as
+ * source="manual" by the preset itself (e.g. the quotation's Quantity and
+ * Subtotal), plus any the user added ad-hoc via "Custom columns".
+ */
+function getManualColumns() {
+  const fromPreset = (selectedConfig?.columns || [])
+    .filter((c) => c.source === "manual")
+    .map((c) => ({ key: c.key, label: customization[c.key]?.label || c.label, fromPreset: true }));
+  const userAdded = manualColumns.map((mc) => ({ ...mc, fromPreset: false }));
+  // Order by the current output order so the entry table reads left-to-right
+  // the same way the PDF will.
+  const all = [...fromPreset, ...userAdded];
+  return columnOrder
+    .map((key) => all.find((c) => c.key === key))
+    .filter(Boolean);
 }
 
 function buildManualDataPayload() {
@@ -766,7 +814,7 @@ function buildManualDataPayload() {
   // switching files) can't misalign with the real row count.
   const count = currentItems ? currentItems.length : 0;
   const payload = {};
-  manualColumns.forEach((mc) => {
+  getManualColumns().forEach((mc) => {
     const values = manualColumnData[mc.key] || [];
     payload[mc.key] = Array.from({ length: count }, (_, i) => values[i] || "");
   });

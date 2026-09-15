@@ -12,7 +12,7 @@ import openpyxl
 from openpyxl.drawing.image import Image as XLImage
 from PIL import Image as PILImage
 
-from schemas import DocumentConfig
+from schemas import DocumentConfig, ColumnConfig
 import engine
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -203,14 +203,15 @@ def test_thai_text_renders():
     print("PASS: Thai text extracted correctly from the generated PDF")
 
 
-def test_quotation_subtotal_and_total():
+def test_quotation_manual_subtotal_and_total():
     """
-    Regression test: quotation_sheet's Subtotal column (Unit Price x Quantity)
-    and the grand Total row must compute correctly, and a row with a missing
-    operand (no Quantity) should get a blank Subtotal rather than crashing
-    or silently defaulting to 0.
+    Regression test: quotation_sheet's Subtotal is now a MANUALLY typed,
+    optional column (real-world Quantity values are things like "2 tons" or
+    "500 kg", so auto-calculating price x qty didn't work). Verifies that
+    typed-in subtotals flow through and that the grand Total row still sums
+    them, skipping any row left blank or typed as non-numeric text.
     """
-    print("\n=== quotation_subtotal_and_total (regression) ===")
+    print("\n=== quotation_manual_subtotal_and_total (regression) ===")
     with open(os.path.join(HERE, "presets", "quotation_sheet.json")) as f:
         raw = json.load(f)
     for col in raw["columns"]:
@@ -218,31 +219,74 @@ def test_quotation_subtotal_and_total():
             col["source_header"] = "Quantity"  # map it, as the UI would require
     config = DocumentConfig(**raw)
 
+    subtotal_col = next(c for c in config.columns if c.key == "subtotal")
+    assert subtotal_col.source == "manual", "Subtotal should be a manual-entry column"
+    assert subtotal_col.optional is True, "Subtotal should be optional"
+
     xlsx_path = os.path.join(OUT, "subtotal_regression_input.xlsx")
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.append(["title"])
     ws.append(["Select", "Product Name", "Price Range (THB/kg)", "Quantity", "Remarks"])
-    ws.append(["Yes", "Box", "12.50", "500", ""])       # 12.50 * 500 = 6250.00
-    ws.append(["Yes", "Wrap", "45.00", "50", ""])        # 45.00 * 50 = 2250.00
-    ws.append(["Yes", "No-Qty Item", "10.00", "", ""])   # missing Quantity -> blank subtotal
+    ws.append(["Yes", "Box", "12.50", "2 tons", ""])
+    ws.append(["Yes", "Wrap", "45.00", "500 kg", ""])
+    ws.append(["Yes", "No-Subtotal Item", "10.00", "1 pallet", ""])
     wb.save(xlsx_path)
 
     items = engine.read_excel(xlsx_path, config)
-    engine.apply_computed_values(items, config)
+    # Simulate what the UI sends: subtotals typed in per row, third left blank.
+    engine.apply_manual_values(items, {"subtotal": ["6,250.00", "2,250.00", ""]})
+    engine.apply_computed_values(items, config)  # no-op now, but must not clobber manual values
 
     print(f"Items: {items}")
-    assert items[0]["subtotal"] == "6,250.00", f"Expected 6,250.00, got {items[0]['subtotal']!r}"
-    assert items[1]["subtotal"] == "2,250.00", f"Expected 2,250.00, got {items[1]['subtotal']!r}"
-    assert items[2]["subtotal"] == "", f"Expected blank subtotal for missing Quantity, got {items[2]['subtotal']!r}"
+    assert items[0]["subtotal"] == "6,250.00", f"Got {items[0]['subtotal']!r}"
+    assert items[1]["subtotal"] == "2,250.00", f"Got {items[1]['subtotal']!r}"
+    assert items[2]["subtotal"] == "", f"Expected blank, got {items[2]['subtotal']!r}"
+    # Non-numeric Quantity must survive untouched — it's just text now.
+    assert items[0]["qty"] == "2 tons", f"Got {items[0]['qty']!r}"
 
     out_pdf = os.path.join(OUT, "subtotal_regression_output.pdf")
     engine.generate_pdf(items, config, out_pdf, ASSETS)
 
     import subprocess
     result = subprocess.run(["pdftotext", "-layout", out_pdf, "-"], capture_output=True, text=True)
-    assert "8,500.00" in result.stdout, f"Expected grand total 8,500.00 in output, got: {result.stdout!r}"
-    print("PASS: Subtotal math and grand Total both correct")
+    assert "8,500.00" in result.stdout, f"Expected grand total 8,500.00, got: {result.stdout!r}"
+    assert "2 tons" in result.stdout, "Non-numeric Quantity should render as-is"
+    print("PASS: manual subtotals render and grand Total sums them correctly")
+
+
+def test_computed_columns_still_work():
+    """
+    The "computed" column type is no longer used by any shipped preset (the
+    quotation switched to manual subtotals), but the feature remains
+    supported for any future preset with genuinely numeric source columns.
+    Tested directly against a synthetic config so the capability doesn't
+    silently rot.
+    """
+    print("\n=== computed_columns_still_work ===")
+    config = DocumentConfig(
+        id="synthetic", name="Synthetic", document_title="Synthetic",
+        columns=[
+            ColumnConfig(key="name", label="Item", source_header="Product Name"),
+            ColumnConfig(key="price", label="Price", source_header="Price"),
+            ColumnConfig(key="qty", label="Qty", source_header="Qty"),
+            ColumnConfig(key="total", label="Line Total", source="computed",
+                         compute_operation="multiply", compute_operands=["price", "qty"]),
+        ],
+    )
+    items = [
+        {"name": "A", "price": "10.00", "qty": "3"},
+        {"name": "B", "price": "7.25", "qty": "4"},
+        {"name": "C", "price": "5.00", "qty": ""},      # missing operand -> blank
+        {"name": "D", "price": "180-220", "qty": "2"},  # range, not a number -> blank
+    ]
+    engine.apply_computed_values(items, config)
+    print(f"Items: {items}")
+    assert items[0]["total"] == "30.00", f"Got {items[0]['total']!r}"
+    assert items[1]["total"] == "29.00", f"Got {items[1]['total']!r}"
+    assert items[2]["total"] == "", f"Got {items[2]['total']!r}"
+    assert items[3]["total"] == "", f"Got {items[3]['total']!r}"
+    print("PASS: computed columns calculate correctly and fail soft on bad operands")
 
 
 if __name__ == "__main__":
@@ -251,5 +295,6 @@ if __name__ == "__main__":
     test_truncated_dimension_metadata()
     test_signature_only_on_last_page()
     test_thai_text_renders()
-    test_quotation_subtotal_and_total()
+    test_quotation_manual_subtotal_and_total()
+    test_computed_columns_still_work()
     print("\nAll cases passed.")

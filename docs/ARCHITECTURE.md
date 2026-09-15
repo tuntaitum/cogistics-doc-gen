@@ -177,7 +177,19 @@ The fix is one line — default to same-origin relative URLs (`|| ""`) — but n
 
 **5. Preset `id` must match its filename.** `quotation_sheet.json` must contain `"id": "quotation_sheet"`. The save endpoint enforces this; hand-editing doesn't.
 
-**6. Computed columns need clean numeric sources.** `Subtotal = price × qty` works when price is `"12.50"`. It produces a blank cell (deliberately, not an error) when price is a range like `"180-220"`. Worth remembering: the quotation preset defaults `Unit Price` to the `Price Range (THB/kg)` column, which in a real supply sheet is often a range — in which case Subtotal will be empty until someone maps it to a single-number column.
+**6. There are three kinds of column, and they behave differently.** A column's `source` field decides where its value comes from:
+
+| `source` | Value comes from | Shows in mapping UI? |
+|---|---|---|
+| `"excel"` (default) | A mapped spreadsheet column | Yes — a dropdown |
+| `"manual"` | Typed in per-row by the user in the browser | No — an info row; inputs appear under "Custom columns" |
+| `"computed"` | Calculated from other columns | No — an info row |
+
+The quotation's **Subtotal is `manual`**, deliberately: real Quantity values are things like `"2 tons"` or `"500 kg"`, so multiplying price × qty didn't work in practice. Someone types the subtotal in.
+
+The `computed` type still works and is still tested, but no shipped preset uses it. If you ever reach for it, remember it needs genuinely numeric sources — it fails soft (blank cell, no error) on anything it can't parse, including price ranges like `"180-220"`.
+
+The **Total row** (`totals_column` in the preset) sums whatever's in the named column, numeric-parsing each cell and skipping what it can't read. So it works over manually-typed subtotals, and quietly ignores a row where someone typed prose. If every cell in that column is blank, the column hides itself (it's `optional`) and the Total row disappears with it.
 
 **7. Don't commit anything to `backend/output/` or `backend/uploads/`.** They're gitignored working directories. In production they live on the Railway volume instead.
 
