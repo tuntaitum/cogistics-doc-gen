@@ -35,10 +35,10 @@ def build_client_catalog_xlsx(path):
     ws.append(["-- title row --"])
     ws.append(["Select", "Product Name", "Dimension (Spec)", "Supply Advantage", "Price Range (THB/kg)"])
     rows = [
-        ["Yes", "Frozen Salmon Fillet", "200g x 20 pcs", "Year-round supply, cold chain verified", "180-220"],
-        ["Yes", "Chicken Breast", "1kg x 10 pcs", "Local sourcing, 48hr lead time", "120-150"],
+        ["Yes", "Frozen Red Bean", "whole, 1kgx10pk", "Year-round supply, cold chain verified", "100-110"],
+        ["Yes", "Frozen Lotus Roots", "1kg x 10 pcs", "China sourced, 1 week lead time", "80-100"],
         ["No", "Excluded Item", "n/a", "n/a", "n/a"],
-        ["Yes", "Tiger Prawns", "500g x 12 pcs", "", "350-400"],
+        ["Yes", "Frozen Mango", "500g x 12 pk", "", "125-140"],
     ]
     for r in rows:
         ws.append(r)
@@ -57,8 +57,8 @@ def build_quotation_xlsx(path):
     ws.append(["-- title row --"])
     ws.append(["Select", "Product Name", "Quantity", "Price Range (THB/kg)", "Remarks"])
     rows = [
-        ["Yes", "Cardboard Box (M)", "500", "12.50", "Bulk discount applied"],
-        ["Yes", "Pallet Wrap", "50", "45.00", ""],
+        ["Yes", "Frozen Strawberry", "500", "12.50", "Bulk discount applied"],
+        ["Yes", "Frozen Blueberry", "50", "45.00", ""],
         ["No", "Skip Me", "1", "1", ""],
     ]
     for r in rows:

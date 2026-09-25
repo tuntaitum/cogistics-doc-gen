@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NON-GMO Guarantee Letter - CoDocuments</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .letter-field{display:block;margin:16px 0}.letter-field input{display:block;margin-top:6px;padding:9px;width:min(100%,430px);box-sizing:border-box}
+    .letter-product{display:flex;gap:8px;align-items:center;margin:8px 0}.letter-product input{padding:9px;flex:1;max-width:420px}
+    .letter-preview{width:100%;height:680px;border:1px solid #ddd;margin-top:20px}
+  </style>
+</head>
+<body>
+<header class="app-header"><div class="app-header__inner"><span class="app-header__mark">CoDocuments</span></div></header>
+<main class="wrap">
+  <a class="btn btn--ghost" href="/">← Back</a>
+  <section class="panel">
+    <h1 class="panel__title">NON-GMO Guarantee Letter</h1>
+    <p class="panel__hint">Enter the issue date and products. Check the resulting letter before signing and sending it.</p>
+    <form id="letter-form">
+      <label class="letter-field">Issue date <input id="issue-date" type="date" required></label>
+      <label>Products</label><div id="products"></div>
+      <datalist id="known-products">
+        <option value="Frozen Green peas"></option>
+        <option value="Frozen Sweet corn kernels"></option>
+        <option value="Frozen Red bell peppers"></option>
+        <option value="Frozen Red beans"></option>
+      </datalist>
+      <button class="btn btn--ghost" id="add-product" type="button">+ Add product</button>
+      <div class="panel__actions"><button class="btn btn--primary" type="submit">Preview PDF</button>
+      <a id="download" class="btn btn--primary" hidden download="non-gmo-guarantee-letter.pdf">Download PDF</a></div>
+    </form>
+    <p id="letter-status" class="status" role="status" aria-live="polite"></p>
+    <iframe id="preview" class="letter-preview" title="Letter preview" hidden></iframe>
+  </section>
+</main>
+<script>
+const products = document.getElementById('products');
+const status = document.getElementById('letter-status');
+const download = document.getElementById('download');
+const preview = document.getElementById('preview');
+let url;
+document.getElementById('issue-date').value = new Date().toLocaleDateString('en-CA');
+function addProduct(value='') {
+  if (products.children.length >= 6) return;
+  const row = document.createElement('div'); row.className='letter-product';
+  const input=document.createElement('input'); input.required=true; input.maxLength=90;
+  input.placeholder='Choose or type a product'; input.setAttribute('list','known-products'); input.value=value; input.setAttribute('aria-label','Product name');
+  const remove=document.createElement('button'); remove.type='button'; remove.className='btn btn--ghost'; remove.textContent='Remove';
+  remove.onclick=()=>row.remove(); row.append(input,remove); products.append(row);
+}
+addProduct();
+document.getElementById('add-product').onclick=()=>addProduct();
+document.getElementById('letter-form').onsubmit=async e=>{
+  e.preventDefault(); status.textContent='Generating preview…'; download.hidden=true;
+  const body={issue_date:document.getElementById('issue-date').value,
+    products:[...products.querySelectorAll('input')].map(el=>el.value.trim())};
+  try {
+    const res=await fetch('/api/letters/non-gmo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!res.ok){const error=await res.json(); throw new Error(typeof error.detail==='string'?error.detail:'Please check the date and products');}
+    if(url) URL.revokeObjectURL(url); url=URL.createObjectURL(await res.blob());
+    preview.src=url; preview.hidden=false; download.href=url; download.hidden=false; status.textContent='Preview ready';
+  } catch(err){status.textContent=err.message; preview.hidden=true;}
+};
+</script>
+</body></html>

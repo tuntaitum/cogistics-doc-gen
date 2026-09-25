@@ -33,14 +33,10 @@ from typing import Optional  # used explicitly (not `X | None`) for FastAPI rout
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from fastapi.responses import Response
 from pydantic import ValidationError
-from pydantic import BaseModel, Field
-from datetime import date
 from fastapi.staticfiles import StaticFiles
 
 import engine
-from letters import render_non_gmo
 from schemas import DocumentConfig
 
 logger = logging.getLogger("codocuments")
@@ -101,21 +97,6 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="CoDocuments API", lifespan=lifespan)
-
-
-class NonGmoLetterRequest(BaseModel):
-    issue_date: date
-    products: list[str] = Field(min_length=1, max_length=6)
-
-
-@app.post("/api/letters/non-gmo")
-def non_gmo_letter(request: NonGmoLetterRequest):
-    try:
-        content = render_non_gmo(request.issue_date, request.products)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return Response(content=content, media_type="application/pdf",
-                    headers={"Content-Disposition": 'inline; filename="non-gmo-guarantee-letter.pdf"'})
 
 # Internal tool for now — open CORS. Tighten this once it's deployed
 # somewhere with a known frontend origin.

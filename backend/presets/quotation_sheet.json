@@ -9,6 +9,7 @@
   "select_value": "yes",
   "image_skip_columns": [5],
   "columns": [
+    { "key": "photo", "label": "Photo", "type": "image", "width_mm": 32 },
     { "key": "name", "label": "Item", "type": "text", "source_header": "Product Name", "width_mode": "flex", "flex_weight": 1.4, "emphasis": true },
     { "key": "price", "label": "Unit Price (THB)", "type": "text", "source_header": "Price Range (THB/kg)", "width_mm": 30, "align": "center" },
     { "key": "qty", "label": "Quantity", "type": "text", "source_header": null, "width_mm": 25, "align": "center" },
