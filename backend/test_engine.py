@@ -14,6 +14,8 @@ from PIL import Image as PILImage
 
 from schemas import DocumentConfig, ColumnConfig, GroupedReportConfig
 import engine
+import grouped_report as gr
+import subprocess
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(HERE, "assets")
@@ -377,6 +379,149 @@ def test_grouped_report_config():
     print(f"PASS: {len(files)} report config(s) valid; 7 kinds of bad config rejected")
 
 
+def _load_report_cfg():
+    path = os.path.join(HERE, "reports", "food_pipeline_daily.json")
+    return GroupedReportConfig(**json.load(open(path, encoding="utf-8")))
+
+
+def build_tms_report_xlsx(path, cfg, drop_sheet=None, rename_header=None, rows=True):
+    """A dummy multi-client TMS export built from the report config's own headers.
+    Mirrors the real file: numbered sheet names, title row 1, headers row 2,
+    line breaks inside some headers, an unrelated extra sheet and column."""
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+    sheet_titles = {"in_transit": "1.กำลังจัดส่ง", "delivered": "2.จัดส่งสำเร็จ", "failed": "3.จัดส่งไม่สำเร็จ"}
+    prod = ("รหัสสินค้า 1 | ชื่อสินค้า Mango | จำนวน 2 | น้ำหนัก 5 kg. | ปริมาตร 0 CBM , "
+            "รหัสสินค้า 2 | ชื่อสินค้า Kiwi | จำนวน 1 | น้ำหนัก 2 kg. | ปริมาตร 0 CBM")
+    OK, STATUS = "จัดส่งเรียบร้อยแล้ว", cfg.status_header
+    DAY, NEXT = "06-10-2026 (16:00)", "05-10-2026 (22:00)"
+
+    def row(note, client, date=DAY, status=OK, **extra):
+        return dict(note=note, client=client, date=date, status=status, **extra)
+
+    data = {
+        "delivered": [
+            row("TMS-ALPHA-D1", "Alpha Foods Co., Ltd."), row("TMS-ALPHA-D2", "Alpha Foods Co., Ltd."),
+            row("TMS-ALPHA-D3", "Alpha Foods Co., Ltd.", status="กำลังจัดส่ง"),        # wrong status for this sheet
+            row("TMS-BETA-D1", "บริษัท เบต้า จำกัด"),
+            row("TMS-GAMMA-D1", "Gamma & Sons <Trading>"),                              # XML-special characters
+            row("TMS-BLANK-D1", ""),                                                    # no client
+            None,                                                                       # blank spacer row
+        ],
+        "in_transit": [row("TMS-ALPHA-T1", "Alpha Foods Co., Ltd.", status="กำลังจัดส่ง"),
+                       row("TMS-GAMMA-T1", "Gamma & Sons <Trading>", date=NEXT, status="กำลังจัดส่ง"),  # different date
+                       None],
+        "failed": [row("TMS-ALPHA-F1", "Alpha Foods Co., Ltd.", status="จัดส่งไม่สำเร็จ", cause="Recipient", problem="Closed")],
+    }
+    for sec in cfg.sections:
+        if sec.key == drop_sheet:
+            continue
+        ws = wb.create_sheet(sheet_titles[sec.key])
+        ws.append(["Daily report title row"])
+        wanted = [cfg.group_by_header, cfg.report_date_header, cfg.status_header, "unrelated column"] + \
+                 [c.source_header for c in sec.columns]
+        headers = list(dict.fromkeys(wanted))
+        ws.append([h.replace(" ( ", " \n( ") if h != rename_header else h + " (renamed)" for h in headers])
+        if not rows:
+            continue
+        for r in data[sec.key]:
+            if r is None:
+                ws.append([None] * len(headers)); continue
+            values = {cfg.group_by_header: r["client"], cfg.report_date_header: r["date"], STATUS: r["status"],
+                      "unrelated column": "zzz"}
+            for c in sec.columns:
+                values[c.source_header] = {"note_no": r["note"], "products": prod, "items": 2.0, "pcs": 3.0,
+                                           "weight": 7.0, "dest": "DC1", "cause": r.get("cause", ""),
+                                           "problem": r.get("problem", "")}.get(c.key, "x")
+            ws.append([values.get(h, "") for h in headers])
+    wb.create_sheet("4.นำกลับคลัง").append(["junk"])
+    wb.save(path)
+
+
+def _pdf_text(path):
+    return subprocess.run(["pdftotext", path, "-"], capture_output=True, text=True, check=True).stdout
+
+
+def test_grouped_report_generation():
+    print("\n=== grouped_report_generation ===")
+    import shutil, datetime
+    cfg = _load_report_cfg()
+    xlsx, out = os.path.join(OUT, "_tms.xlsx"), os.path.join(OUT, "_tms_reports")
+    shutil.rmtree(out, ignore_errors=True)
+    build_tms_report_xlsx(xlsx, cfg)
+    res = gr.generate_grouped_reports(xlsx, cfg, out, ASSETS)
+
+    # report date = most common start date; the odd row is flagged, not dropped
+    assert res.report_date == datetime.date(2026, 10, 6), res.report_date
+    assert any("05-10-2026" in w for w in res.warnings), "different start date not flagged"
+    assert any("status is" in w and "Alpha Foods" in w for w in res.warnings), "wrong status not flagged"
+    assert any("no value" in w for w in res.warnings), "blank client not flagged"
+
+    by_name = {c.name: c for c in res.clients}
+    assert set(by_name) == {"Alpha Foods Co., Ltd.", "บริษัท เบต้า จำกัด", "Gamma & Sons <Trading>", cfg.blank_group_label}, set(by_name)
+    assert by_name["Alpha Foods Co., Ltd."].counts == {"delivered": 3, "in_transit": 1, "failed": 1}
+    assert by_name["บริษัท เบต้า จำกัด"].counts == {"delivered": 1, "in_transit": 0, "failed": 0}
+    assert by_name["Gamma & Sons <Trading>"].counts == {"delivered": 1, "in_transit": 1, "failed": 0}
+
+    # file names: safe, unique, dated year-first
+    names = [c.filename for c in res.clients]
+    assert len({n.casefold() for n in names}) == len(names)
+    assert all(n.endswith("2026-10-06.pdf") and not re.search(r'[\\/:*?"<>|]', n) for n in names), names
+
+    # PRIVACY: each client's PDF holds its own orders and nobody else's
+    markers = {"Alpha Foods Co., Ltd.": "TMS-ALPHA", "บริษัท เบต้า จำกัด": "TMS-BETA",
+               "Gamma & Sons <Trading>": "TMS-GAMMA", cfg.blank_group_label: "TMS-BLANK"}
+    for cr in res.clients:
+        text = _pdf_text(cr.path)
+        assert markers[cr.name] in text, f"{cr.name}: own orders missing"
+        for other, m in markers.items():
+            if other != cr.name:
+                assert m not in text, f"LEAK: {other}'s order {m} appears in {cr.name}'s report"
+        assert all(b == (842, 595) for b in _page_boxes(cr.path)), "report is not landscape"
+        # product column shows code/name/qty only, no per-item weight or volume noise
+        assert "Mango" in text and "CBM" not in text, "product filtering failed"
+
+    # sections: failed/in-transit appear only for clients that have rows; special characters survive
+    beta, alpha, gamma = (_pdf_text(by_name[n].path) for n in ("บริษัท เบต้า จำกัด", "Alpha Foods Co., Ltd.", "Gamma & Sons <Trading>"))
+    assert "Delivery Failed (" not in beta and "In Transit (" not in beta, "empty sections should be hidden"
+    assert "Delivery Failed (1)" in alpha and "In Transit (1)" in alpha
+    assert "Gamma & Sons <Trading>" in gamma, "XML-special characters mangled"
+    assert "Delivered (" in beta, "Delivered must always show"
+    print("PASS: 4 clients, correct counts, no cross-client leakage, hidden empty sections, safe filenames")
+
+    # filename uniqueness helper
+    used = set()
+    assert gr.safe_filename("A/B", used) == "A-B.pdf" and gr.safe_filename("a-b", used) == "a-b (2).pdf"
+    print("PASS: clashing file names are made unique")
+
+
+def test_grouped_report_errors():
+    print("\n=== grouped_report_errors ===")
+    cfg = _load_report_cfg()
+    xlsx, out = os.path.join(OUT, "_tms_bad.xlsx"), os.path.join(OUT, "_tms_bad_out")
+
+    def expect_error(text, **kw):
+        build_tms_report_xlsx(xlsx, cfg, **kw)
+        try:
+            gr.generate_grouped_reports(xlsx, cfg, out, ASSETS)
+        except gr.ReportError as e:
+            assert text in str(e), f"wrong error: {e}"
+            return
+        raise AssertionError(f"expected ReportError containing {text!r}")
+
+    expect_error("Sheet 'จัดส่งไม่สำเร็จ' was not found", drop_sheet="failed")      # never silently say "no failures"
+    expect_error("missing expected column", rename_header="เลขที่ใบนำส่ง")
+    # a missing OPTIONAL column is tolerated, with a warning
+    build_tms_report_xlsx(xlsx, cfg, rename_header="หมายเหตุ QC")
+    res = gr.generate_grouped_reports(xlsx, cfg, out, ASSETS)
+    assert any("optional column" in w for w in res.warnings)
+    # an empty day produces no reports and says so
+    build_tms_report_xlsx(xlsx, cfg, rows=False)
+    res = gr.generate_grouped_reports(xlsx, cfg, out, ASSETS)
+    assert res.clients == [] and any("No orders" in w for w in res.warnings)
+    print("PASS: missing sheet/column -> clear error; optional column -> warning; empty day -> no reports")
+
+
 if __name__ == "__main__":
     run_case("client_catalog", build_client_catalog_xlsx, "client_catalog.json")
     run_case("quotation_sheet", build_quotation_xlsx, "quotation_sheet.json")
@@ -388,4 +533,6 @@ if __name__ == "__main__":
     test_excel_format_sniffing()
     test_landscape_orientation()
     test_grouped_report_config()
+    test_grouped_report_generation()
+    test_grouped_report_errors()
     print("\nAll cases passed.")

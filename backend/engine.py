@@ -532,7 +532,13 @@ def make_thumbnail(image_bytes, c_light_bg, c_accent, c_mid, size=THUMB_SIZE):
 # ─────────────────────────────────────────────
 
 def build_table(items: list[dict], config: DocumentConfig, styles: dict,
-                 c_primary, c_accent, c_light_bg, c_mid, c_dark, c_white):
+                 c_primary, c_accent, c_light_bg, c_mid, c_dark, c_white,
+                 auto_height: bool = False):
+    # auto_height=False (default, used by every veggie document): every body row
+    # is a fixed 10mm (or thumbnail height) — the look the catalogs are built on.
+    # auto_height=True: rows grow to fit their text and the header row repeats on
+    # each page. Needed when a cell can hold several lines (e.g. the report's
+    # product list), which a fixed row height would overflow into the next row.
     # Decide which optional columns actually show, based on real data
     active_columns = []
     for c in config.columns:
@@ -576,7 +582,7 @@ def build_table(items: list[dict], config: DocumentConfig, styles: dict,
 
     has_image = any(c.type == "image" for c in active_columns)
     row_h = (THUMB_SIZE + 4 * mm) if has_image else 10 * mm
-    row_heights = [10 * mm] + [row_h] * len(items)
+    row_heights = [10 * mm] + ([None] * len(items) if auto_height else [row_h] * len(items))
 
     extra_style_commands = []
     totals_col_idx = next((i for i, c in enumerate(active_columns) if c.key == config.totals_column), None)
@@ -601,7 +607,7 @@ def build_table(items: list[dict], config: DocumentConfig, styles: dict,
         ]
         extra_style_commands = [cmd for cmd in extra_style_commands if cmd is not None]
 
-    t = Table(data, colWidths=col_widths, rowHeights=row_heights)
+    t = Table(data, colWidths=col_widths, rowHeights=row_heights, repeatRows=1 if auto_height else 0)
     t.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), c_primary),
         ("ALIGN", (0, 0), (-1, 0), "CENTER"),

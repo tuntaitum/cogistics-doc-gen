@@ -2,12 +2,13 @@
   "id": "food_pipeline_daily",
   "name": "Food Pipeline — Daily Delivery Report",
   "document_title": "Daily Delivery Report",
-  "intro_text_template": "{group} --- {total} order(s) in this report",
-  "filename_template": "{group} - Daily Delivery Report",
+  "intro_text_template": "{group} --- {total} order(s) for {date}",
+  "filename_template": "{group} - Daily Delivery Report - {date_iso}",
   "orientation": "landscape",
   "header_row": 2,
   "data_start_row": 3,
   "group_by_header": "ผู้ว่าจ้าง",
+  "report_date_header": "วันที่จัดส่งเริ่มต้น",
   "blank_group_label": "(No client specified)",
   "status_header": "สถานะการจัดส่ง",
   "sections": [
@@ -40,8 +41,15 @@
           "type": "text",
           "source_header": "รายละเอียดสินค้า",
           "width_mode": "flex",
-          "flex_weight": 2.6,
-          "split_on": " , "
+          "flex_weight": 3.4,
+          "split_on": " , ",
+          "part_separator": " | ",
+          "keep_labels": [
+            "รหัสสินค้า",
+            "ชื่อสินค้า",
+            "จำนวน"
+          ],
+          "show_labels": false
         },
         {
           "key": "items",
@@ -120,8 +128,15 @@
           "type": "text",
           "source_header": "รายละเอียดสินค้า",
           "width_mode": "flex",
-          "flex_weight": 2.6,
-          "split_on": " , "
+          "flex_weight": 3.4,
+          "split_on": " , ",
+          "part_separator": " | ",
+          "keep_labels": [
+            "รหัสสินค้า",
+            "ชื่อสินค้า",
+            "จำนวน"
+          ],
+          "show_labels": false
         },
         {
           "key": "items",
@@ -202,8 +217,15 @@
           "type": "text",
           "source_header": "รายละเอียดสินค้า",
           "width_mode": "flex",
-          "flex_weight": 2.6,
-          "split_on": " , "
+          "flex_weight": 3.4,
+          "split_on": " , ",
+          "part_separator": " | ",
+          "keep_labels": [
+            "รหัสสินค้า",
+            "ชื่อสินค้า",
+            "จำนวน"
+          ],
+          "show_labels": false
         },
         {
           "key": "items",

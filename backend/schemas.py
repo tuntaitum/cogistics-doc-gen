@@ -153,6 +153,17 @@ class ReportColumn(ColumnConfig):
     # shown on its own line inside the cell. For TMS cells that pack several
     # items into one string (e.g. the product list joined with " , ").
     split_on: Optional[str] = None
+    # Each item can itself be a row of "label value" parts, e.g.
+    #   "รหัสสินค้า 3001868 | ชื่อสินค้า Jam 78g | จำนวน 1 | น้ำหนัก 8.74 kg."
+    # part_separator splits an item into those parts (here " | "). The first
+    # word of each part is its label.
+    part_separator: Optional[str] = None
+    # Show ONLY parts whose label is listed here (others are dropped). If an item
+    # contains none of them (e.g. the TMS changed its wording) the whole item is
+    # shown instead, so information is never silently lost.
+    keep_labels: Optional[list[str]] = None
+    # False = print just the values ("3001868 | Jam 78g | 1"), without the labels.
+    show_labels: bool = True
 
 
 class ReportSection(BaseModel):
@@ -183,9 +194,13 @@ class GroupedReportConfig(BaseModel):
     id: str
     name: str
     document_title: str
-    # "{group}" = the group value (e.g. the client), "{total}" = rows across sections
+    # Placeholders available in both templates below:
+    #   {group}     the group value (e.g. the client's name)
+    #   {total}     number of rows for that group, across all sections
+    #   {date}      the report date as the TMS writes it, day first: 06-10-2026
+    #   {date_iso}  the same date year first: 2026-10-06 (sorts correctly in a folder)
     intro_text_template: str = "{group} --- {total} order(s)"
-    # Output file name (without .pdf); "{group}" is replaced, then sanitised.
+    # Output file name (without .pdf); placeholders are filled, then it is sanitised.
     filename_template: str = "{group}"
     orientation: Literal["portrait", "landscape"] = "portrait"
 
@@ -195,6 +210,10 @@ class GroupedReportConfig(BaseModel):
 
     # Header of the column whose unique values each get their own PDF.
     group_by_header: str
+    # Header of the column the REPORT DATE is read from (text like
+    # "06-10-2026 (16:00)"; the date part is used). The most common date in the
+    # file wins; rows with any other date are kept but flagged, never dropped.
+    report_date_header: Optional[str] = None
     # Rows where the group cell is blank are NOT dropped: they are put in a
     # report under this label so nothing silently disappears.
     blank_group_label: str = "(No client specified)"
@@ -225,6 +244,21 @@ class GroupedReportConfig(BaseModel):
                         "with a source_header). Manual, computed and image columns are not "
                         "available here."
                     )
+        for sec in self.sections:
+            for c in sec.columns:
+                if c.keep_labels is not None and not c.part_separator:
+                    raise ValueError(f"section '{sec.key}', column '{c.key}': keep_labels needs part_separator")
+        for field_name in ("intro_text_template", "filename_template"):
+            template = getattr(self, field_name)
+            try:
+                template.format(group="x", total=0, date="01-01-2000", date_iso="2000-01-01")
+            except (KeyError, IndexError, ValueError) as e:
+                raise ValueError(
+                    f"{field_name} {template!r} is invalid ({e!r}). "
+                    "Allowed placeholders: {group} {total} {date} {date_iso}"
+                )
+            if ("{date}" in template or "{date_iso}" in template) and not self.report_date_header:
+                raise ValueError(f"{field_name} uses a date placeholder but report_date_header is not set")
         if any(sec.expected_status for sec in self.sections) and not self.status_header:
             raise ValueError("expected_status is set on a section but status_header is missing")
         return self
