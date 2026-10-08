@@ -16,193 +16,42 @@
 </header>
 
 <main class="wrap">
-
   <section class="panel">
-    <h2 class="panel__title panel__title--sm">Guarantee letters</h2>
-    <p class="panel__hint">Create a NON-GMO letter by choosing the date and products.</p>
-    <a class="btn btn--primary" href="non-gmo.html">Open NON-GMO letter form</a>
+    <h1 class="panel__title">What would you like to work on?</h1>
+    <p class="panel__hint">Choose a service to see its documents.</p>
+    <div class="service-grid" id="service-grid"></div>
+    <div class="status" id="status" role="status" aria-live="polite"></div>
   </section>
-
-  <ol class="steps">
-    <li class="steps__item is-active" data-step="1">Upload &amp; check</li>
-    <li class="steps__item" data-step="2">Document type</li>
-    <li class="steps__item" data-step="3">Map &amp; generate</li>
-  </ol>
-
-  <!-- ═══════════════ PAGE 1: Upload & check headers ═══════════════ -->
-  <div class="page" id="page-upload" data-page="1">
-
-    <section class="panel">
-      <h1 class="panel__title">Upload your spreadsheet</h1>
-      <p class="panel__hint">An .xlsx file with a header row and a select column marking which rows to include.</p>
-
-      <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload an Excel file">
-        <input type="file" id="file-input" accept=".xlsx,.xls" hidden>
-        <div class="dropzone__icon" aria-hidden="true">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
-            <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
-            <path d="M12 3v12"/>
-            <path d="M7 8l5-5 5 5"/>
-          </svg>
-        </div>
-        <p class="dropzone__text"><strong>Drop your .xlsx file here</strong> or click to browse</p>
-        <p class="dropzone__filename" id="dropzone-filename"></p>
-      </div>
-
-      <div class="field-row">
-        <label for="header-row" class="field-row__label">
-          Header row
-          <span class="field-row__hint">Which row has your column names? (usually row 2)</span>
-        </label>
-        <input type="number" id="header-row" value="2" min="1" class="field-row__input">
-      </div>
-
-      <button class="btn btn--primary" id="detect-btn" disabled>Detect columns</button>
-
-      <div class="status" id="status" role="status" aria-live="polite"></div>
-    </section>
-
-    <section class="panel" id="panel-headers" hidden>
-      <h2 class="panel__title panel__title--sm">Columns found</h2>
-      <p class="panel__hint" id="headers-summary"></p>
-      <ul class="chip-list" id="header-chips"></ul>
-
-      <div class="preview-table-wrap" id="preview-table-wrap" hidden>
-        <p class="preview-table-label">First few rows, for a sanity check</p>
-        <div class="preview-table-scroll">
-          <table class="preview-table" id="preview-table"></table>
-        </div>
-      </div>
-
-      <div class="panel__actions">
-        <button class="btn btn--ghost" id="wrong-row-btn">These don't look right — try a different row</button>
-        <button class="btn btn--primary" id="continue-btn">
-          Continue → choose document type
-        </button>
-      </div>
-    </section>
-
-  </div>
-
-  <!-- ═══════════════ PAGE 2: Choose document type ═══════════════ -->
-  <div class="page" id="page-preset" data-page="2" hidden>
-
-    <button type="button" class="btn btn--ghost back-btn" id="back-to-upload">← Back to upload</button>
-
-    <section class="panel">
-      <h2 class="panel__title panel__title--sm">Choose a document type</h2>
-      <p class="panel__hint">Pick the template that matches what you're making.</p>
-      <ul class="preset-list" id="preset-list"></ul>
-      <div class="status" id="preset-status" role="status" aria-live="polite"></div>
-    </section>
-
-    <section class="panel" id="panel-preset-preview" hidden>
-      <div class="preview-frame-wrap" id="preset-preview-frame-wrap">
-        <div class="preview-frame-header">
-          <span>Example of this document type</span>
-          <span class="preview-frame-status" id="preset-preview-status"></span>
-        </div>
-        <iframe class="preview-frame" id="preset-preview-frame" title="Document type preview"></iframe>
-      </div>
-      <div class="status" id="preset-preview-error" hidden></div>
-
-      <button class="btn btn--primary" id="continue-to-mapping-btn">
-        Continue → map columns
-      </button>
-    </section>
-
-  </div>
-
-  <!-- ═══════════════ PAGE 3: Map columns, customize, generate ═══════════════ -->
-  <div class="page" id="page-mapping" data-page="3" hidden>
-
-    <button type="button" class="btn btn--ghost back-btn" id="back-to-preset">← Back to document type</button>
-
-    <section class="panel">
-      <h2 class="panel__title panel__title--sm">Your data</h2>
-      <p class="panel__hint">First few rows, for reference while you map columns below.</p>
-      <div class="preview-table-scroll">
-        <table class="preview-table" id="mapping-reference-table"></table>
-      </div>
-    </section>
-
-    <section class="panel">
-      <h2 class="panel__title panel__title--sm">Map your columns</h2>
-      <p class="panel__hint" id="mapping-hint"></p>
-      <div class="mapping-list" id="mapping-list"></div>
-    </section>
-
-    <section class="panel">
-      <h2 class="panel__title panel__title--sm">Custom columns</h2>
-      <p class="panel__hint">Add a column with no spreadsheet source — type a value in for each row yourself (e.g. a Quantity you assign manually).</p>
-
-      <ul class="chip-list chip-list--removable" id="custom-column-chips"></ul>
-
-      <div class="add-column-row">
-        <input type="text" id="new-column-label" class="field-row__input field-row__input--wide" placeholder="Column name, e.g. Quantity">
-        <button type="button" class="btn btn--ghost" id="add-column-btn">+ Add column</button>
-      </div>
-
-      <div class="data-entry-wrap" id="data-entry-wrap" hidden>
-        <p class="preview-table-label">Fill in a value for each row (leave blank if not needed)</p>
-        <div class="preview-table-scroll">
-          <table class="data-entry-table" id="data-entry-table"></table>
-        </div>
-      </div>
-    </section>
-
-    <section class="panel">
-      <h2 class="panel__title panel__title--sm">Customize headers &amp; column widths</h2>
-
-      <div class="field-row">
-        <label for="doc-title-input" class="field-row__label">
-          Document title
-          <span class="field-row__hint">Printed at the top of the PDF</span>
-        </label>
-        <input type="text" id="doc-title-input" class="field-row__input field-row__input--wide">
-      </div>
-
-      <div class="customize-list" id="customize-list"></div>
-
-      <div class="field-row field-row--stacked">
-        <label for="footer-notes-input" class="field-row__label">
-          Additional notes / terms (optional)
-          <span class="field-row__hint">Shown below the table — e.g. quotation conditions, delivery terms. Each line becomes its own line in the PDF.</span>
-        </label>
-        <textarea id="footer-notes-input" class="footer-notes-textarea" rows="4" placeholder="Quotation Conditions:&#10;1. Validity: Quotation valid for 7 days from issue date.&#10;2. Credit Term: 15 days."></textarea>
-      </div>
-
-      <div class="preview-frame-wrap">
-        <div class="preview-frame-header">
-          <span>Live preview</span>
-          <span class="preview-frame-status" id="preview-frame-status"></span>
-        </div>
-        <iframe class="preview-frame" id="preview-frame" title="PDF preview"></iframe>
-      </div>
-    </section>
-
-    <section class="panel">
-      <div class="field-row">
-        <label for="filename-input" class="field-row__label">
-          File name
-          <span class="field-row__hint">What the downloaded PDF will be called</span>
-        </label>
-        <input type="text" id="filename-input" class="field-row__input field-row__input--wide">
-      </div>
-
-      <button class="btn btn--primary" id="generate-btn" disabled>Generate PDF</button>
-      <div class="status" id="generate-status" role="status" aria-live="polite"></div>
-
-      <div class="result" id="result-panel" hidden>
-        <p class="result__text" id="result-text"></p>
-        <a class="btn btn--primary" id="download-link" href="#" download>Download PDF</a>
-      </div>
-    </section>
-
-  </div>
-
 </main>
 
-<script src="app.js"></script>
+<script>
+// The cards come from services.json — to add a service or move a tool, edit that
+// file; this page doesn't change. Text is set with textContent, never innerHTML.
+(async () => {
+  const grid = document.getElementById("service-grid");
+  const status = document.getElementById("status");
+  try {
+    const res = await fetch("services.json");
+    if (!res.ok) throw new Error(res.status);
+    const { services } = await res.json();
+    for (const s of services) {
+      const a = document.createElement("a");
+      a.className = "service-card";
+      a.href = s.href;
+      const name = document.createElement("h2");
+      name.className = "service-card__name";
+      name.textContent = s.name;
+      const desc = document.createElement("p");
+      desc.className = "service-card__desc";
+      desc.textContent = s.description;
+      a.append(name, desc);
+      grid.appendChild(a);
+    }
+  } catch (err) {
+    status.className = "status is-error";
+    status.textContent = "Couldn't load the list of services. Is the backend running?";
+  }
+})();
+</script>
 </body>
 </html>

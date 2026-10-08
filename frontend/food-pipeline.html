@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CoDocuments — Food Pipeline</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="page--wide">
+
+<header class="app-header">
+  <div class="app-header__inner">
+    <span class="app-header__mark">CoDocuments</span>
+    <span class="app-header__tagline">Cogistics document generator</span>
+  </div>
+</header>
+
+<!-- data-report-id picks the report definition in backend/reports/*.json.
+     report.js is generic: another grouped report reuses it with a different id. -->
+<main class="wrap wrap--wide" data-report-id="food_pipeline_daily">
+
+  <a class="btn btn--ghost back-btn" href="index.html">← All services</a>
+
+  <section class="panel" id="panel-upload">
+    <h1 class="panel__title">Daily delivery report</h1>
+    <p class="panel__hint">Upload the daily export from the TMS. You'll get one PDF per client, with delivered, in-transit and failed orders.</p>
+
+    <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload the TMS Excel file">
+      <input type="file" id="file-input" accept=".xlsx,.xls" hidden>
+      <div class="dropzone__icon" aria-hidden="true">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+          <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+          <path d="M12 3v12"/>
+          <path d="M7 8l5-5 5 5"/>
+        </svg>
+      </div>
+      <p class="dropzone__text"><strong>Drop the TMS export here</strong> or click to browse</p>
+      <p class="dropzone__filename" id="dropzone-filename"></p>
+    </div>
+
+    <button class="btn btn--primary" id="create-btn" disabled>Create reports</button>
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+  </section>
+
+  <section class="panel" id="panel-results" hidden>
+    <h2 class="panel__title" id="results-title"></h2>
+    <p class="panel__hint" id="results-subtitle"></p>
+
+    <div class="warning-box" id="warnings" hidden></div>
+
+    <div class="report-table-scroll" id="table-wrap" hidden>
+      <table class="report-table" id="results-table"></table>
+    </div>
+
+    <div class="button-row">
+      <a class="btn btn--primary" id="zip-link" hidden>Download all (zip)</a>
+      <button class="btn btn--ghost" id="again-btn">Start over</button>
+    </div>
+  </section>
+
+</main>
+
+<script src="report.js"></script>
+</body>
+</html>

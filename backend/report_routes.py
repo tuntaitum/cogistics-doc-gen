@@ -82,7 +82,8 @@ def make_router(*, reports_dir: Path, uploads_dir: Path, output_dir: Path, asset
                 "document_title": cfg.document_title,
                 "group_by_header": cfg.group_by_header,
                 "orientation": cfg.orientation,
-                "sections": [{"key": s.key, "title": s.title, "sheet_name": s.sheet_name} for s in cfg.sections],
+                "sections": [{"key": s.key, "title": s.title, "sheet_name": s.sheet_name, "title_color": s.title_color}
+                             for s in cfg.sections],
             })
         return results
 

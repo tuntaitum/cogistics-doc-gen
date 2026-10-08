@@ -1,0 +1,16 @@
+{
+  "services": [
+    {
+      "id": "food-pipeline",
+      "name": "Food Pipeline",
+      "description": "Daily delivery reports for each client.",
+      "href": "food-pipeline.html"
+    },
+    {
+      "id": "veggie-solution",
+      "name": "Veggie Solution",
+      "description": "Product catalogs, quotation sheets and guarantee letters.",
+      "href": "veggie.html"
+    }
+  ]
+}
