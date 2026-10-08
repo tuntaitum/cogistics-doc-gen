@@ -1,0 +1,2 @@
+# Extra packages needed only to run the tests (not by the deployed app)
+httpx>=0.27

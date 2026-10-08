@@ -7,7 +7,8 @@ Replaces launcher.py. Jobs:
   3. Generate a PDF from an uploaded file + a config (preset + user's column mapping)
   4. Preview a PDF from a partial config, for the customize UI
   5. Let the frontend download the finished PDF
-  6. Periodically delete old uploads/output files — this is a working-files
+  6. Grouped reports (e.g. Food Pipeline daily delivery report) — see report_routes.py
+  7. Periodically delete old uploads/output files — this is a working-files
      folder, not permanent storage (see RETENTION_HOURS below)
 
 Run with:
@@ -21,6 +22,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -41,6 +43,7 @@ from fastapi.staticfiles import StaticFiles
 
 import engine
 from letters import render_non_gmo
+from report_routes import make_router, RUN_DIR_PREFIX
 from schemas import DocumentConfig
 
 logger = logging.getLogger("codocuments")
@@ -51,6 +54,9 @@ PRESETS_DIR = BASE_DIR / "presets"
 # BASE_DIR alongside presets rather than in the Railway volume.
 EXAMPLES_DIR = BASE_DIR / "presets" / "examples"
 ASSETS_DIR = BASE_DIR / "assets"
+# Grouped-report configs. Deliberately NOT inside presets/: the veggie preset
+# picker treats every *.json there as a DocumentConfig.
+REPORTS_DIR = BASE_DIR / "reports"
 
 DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR)))
 UPLOADS_DIR = DATA_DIR / "uploads"
@@ -79,8 +85,18 @@ def _cleanup_old_files():
                     deleted += 1
             except FileNotFoundError:
                 pass  # already removed by a concurrent sweep or the OS
+    # A grouped-report run is a FOLDER (PDFs + zip), which the file loop above
+    # skips. Remove stale ones, or every run would stay on disk forever.
+    for path in OUTPUT_DIR.iterdir():
+        if path.is_dir() and path.name.startswith(RUN_DIR_PREFIX):
+            try:
+                if path.stat().st_mtime < cutoff:
+                    shutil.rmtree(path, ignore_errors=True)
+                    deleted += 1
+            except FileNotFoundError:
+                pass
     if deleted:
-        logger.info(f"Cleanup: deleted {deleted} file(s) older than {RETENTION_HOURS}h")
+        logger.info(f"Cleanup: deleted {deleted} file(s)/folder(s) older than {RETENTION_HOURS}h")
 
 
 async def _cleanup_loop():
@@ -427,6 +443,10 @@ def download(session_id: str, filename: Optional[str] = None):
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+app.include_router(make_router(
+    reports_dir=REPORTS_DIR, uploads_dir=UPLOADS_DIR, output_dir=OUTPUT_DIR, assets_dir=ASSETS_DIR,
+))
 
 FRONTEND_DIR = BASE_DIR.parent / "frontend"
 app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
