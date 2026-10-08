@@ -134,17 +134,27 @@ app.add_middleware(
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...), header_row: int = Form(2)):
     """
-    Accept an .xlsx, store it under a session id, and return the headers
+    Accept an Excel workbook (.xlsx content, whatever the file is named), store it under a session id, and return the headers
     found in the given row. The session id is passed back into /generate
     so we don't need to re-upload the file after mapping columns.
     """
-    if not file.filename.lower().endswith(".xlsx"):
-        raise HTTPException(400, "Please upload a .xlsx file")
+    # Judge the file by its contents, not its name: the TMS export is named
+    # ".xls" but is really an .xlsx inside. See engine.detect_excel_format().
+    data = await file.read()
+    fmt = engine.detect_excel_format(data)
+    if fmt == "xls":
+        raise HTTPException(
+            400,
+            "This is an old-format .xls file, which can't be read. "
+            "Open it in Excel and use Save As > Excel Workbook (.xlsx), then upload that.",
+        )
+    if fmt != "xlsx":
+        raise HTTPException(400, "This doesn't look like an Excel workbook. Please upload an .xlsx file.")
 
     session_id = str(uuid.uuid4())
     dest = UPLOADS_DIR / f"{session_id}.xlsx"
     with open(dest, "wb") as f:
-        f.write(await file.read())
+        f.write(data)
 
     try:
         headers, preview_rows = engine.preview_excel(str(dest), header_row=header_row)

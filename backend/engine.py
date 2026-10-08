@@ -11,6 +11,7 @@ from __future__ import annotations  # lets `int | None` etc. work on Python < 3.
 
 import io
 import os
+import zipfile
 from xml.sax.saxutils import escape as xml_escape
 import openpyxl
 from PIL import Image as PILImage
@@ -77,6 +78,40 @@ THUMB_SIZE = 28 * mm
 PX_PER_EMU = 1 / 9525
 SIGNATURE_AREA_HEIGHT = 46 * mm  # reserved space above the footer bar, last page only
 FOOTER_TOP_MM = 12.8             # 12mm background band + 0.8mm accent stripe
+
+
+# ─────────────────────────────────────────────
+#  EXCEL: FILE FORMAT SNIFFING
+# ─────────────────────────────────────────────
+
+_ZIP_MAGIC = b"PK\x03\x04"                          # .xlsx is a zip of XML files
+_OLE_MAGIC = b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1"    # legacy binary .xls (Excel 97-2003)
+
+
+def detect_excel_format(data: bytes) -> str:
+    """Identify an uploaded spreadsheet by its CONTENT, not its file name.
+
+    Returns:
+      "xlsx"    - a modern Excel workbook (readable by openpyxl)
+      "xls"     - a genuine legacy binary .xls (NOT readable by openpyxl)
+      "unknown" - anything else (a Word doc, a PDF, a renamed image, ...)
+
+    Why this exists: the TMS exports a file named ".xls" that is really an
+    .xlsx inside. Trusting the extension rejected a perfectly readable file.
+    A name can lie; the first bytes of the file can't.
+    """
+    if data.startswith(_OLE_MAGIC):
+        return "xls"
+    if data.startswith(_ZIP_MAGIC):
+        # Many formats are zips (.docx, .pptx, .zip). A real workbook has
+        # xl/workbook.xml inside.
+        try:
+            with zipfile.ZipFile(io.BytesIO(data)) as z:
+                if "xl/workbook.xml" in z.namelist():
+                    return "xlsx"
+        except zipfile.BadZipFile:
+            pass
+    return "unknown"
 
 
 # ─────────────────────────────────────────────

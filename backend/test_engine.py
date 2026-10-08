@@ -289,6 +289,33 @@ def test_computed_columns_still_work():
     print("PASS: computed columns calculate correctly and fail soft on bad operands")
 
 
+def test_excel_format_sniffing():
+    """Regression: the TMS export is named .xls but is really an .xlsx inside.
+    The upload must judge files by content, not by extension."""
+    import io, zipfile
+    print("\n=== excel_format_sniffing (regression) ===")
+
+    # A real workbook is recognised as xlsx...
+    buf = io.BytesIO()
+    wb = openpyxl.Workbook()
+    wb.active.append(["x"])
+    wb.save(buf)
+    assert engine.detect_excel_format(buf.getvalue()) == "xlsx", "real .xlsx not recognised"
+
+    # ...a genuine legacy binary .xls is identified as such (needs a clear message, not a crash)...
+    legacy = b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1" + b"\x00" * 64
+    assert engine.detect_excel_format(legacy) == "xls", "legacy .xls not recognised"
+
+    # ...and a zip that is NOT a workbook (e.g. a .docx) is rejected, as is garbage.
+    docx_like = io.BytesIO()
+    with zipfile.ZipFile(docx_like, "w") as z:
+        z.writestr("word/document.xml", "<x/>")
+    assert engine.detect_excel_format(docx_like.getvalue()) == "unknown", ".docx-like zip accepted"
+    assert engine.detect_excel_format(b"%PDF-1.7 not a spreadsheet") == "unknown", "PDF accepted"
+    assert engine.detect_excel_format(b"") == "unknown", "empty file accepted"
+    print("PASS: workbook detected by content; legacy .xls, non-Excel zips and junk rejected")
+
+
 if __name__ == "__main__":
     run_case("client_catalog", build_client_catalog_xlsx, "client_catalog.json")
     run_case("quotation_sheet", build_quotation_xlsx, "quotation_sheet.json")
@@ -297,4 +324,5 @@ if __name__ == "__main__":
     test_thai_text_renders()
     test_quotation_manual_subtotal_and_total()
     test_computed_columns_still_work()
+    test_excel_format_sniffing()
     print("\nAll cases passed.")

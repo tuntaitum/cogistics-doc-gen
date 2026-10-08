@@ -126,8 +126,10 @@ fileInput.addEventListener("change", () => {
 
 function handleFileSelected(file) {
   clearStatus();
-  if (!file.name.toLowerCase().endsWith(".xlsx")) {
-    showError(`"${file.name}" isn't an .xlsx file. Please choose an Excel file.`);
+  // Only a quick sanity check on the name. The server inspects the file's real
+  // contents (the TMS export is named .xls but is really .xlsx inside).
+  if (!/\.xlsx?$/i.test(file.name)) {
+    showError(`"${file.name}" isn't an Excel file. Please choose an .xlsx file.`);
     selectedFile = null;
     detectBtn.disabled = true;
     dropzoneFilename.textContent = "";
