@@ -9,7 +9,7 @@ JSON files that use this same schema, not three code paths.
 
 from __future__ import annotations
 from typing import Literal, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class BrandConfig(BaseModel):
@@ -89,6 +89,9 @@ class DocumentConfig(BaseModel):
     name: str                      # shown in the preset picker, e.g. "Bakery BU Catalog"
     document_title: str            # printed at the top of the PDF
     intro_text_template: str = "This document lists {count} item(s)."
+    # Page orientation. Defaults to portrait so every existing preset is
+    # unchanged; wide tables (e.g. the Food Pipeline delivery report) opt in.
+    orientation: Literal["portrait", "landscape"] = "portrait"
 
     # --- Excel reading ---
     header_row: int = 2            # row containing column headers
@@ -118,3 +121,110 @@ class DocumentConfig(BaseModel):
                 "document_title": "Product Suggestions Catalog",
             }
         }
+
+
+# ═════════════════════════════════════════════
+#  GROUPED, MULTI-SHEET REPORTS
+#  (e.g. Food Pipeline's daily delivery report: one spreadsheet in, one
+#  PDF per client out.)
+#
+#  Deliberately a SEPARATE model from DocumentConfig. A DocumentConfig is
+#  "one sheet -> one table -> one PDF"; this is "several sheets -> rows
+#  grouped by a column -> one PDF per group, each with a table per
+#  section". Forcing both into one schema would make every DocumentConfig
+#  carry fields that only make sense for reports. Both share the same
+#  building blocks (ColumnConfig, FooterBlock, BrandConfig) so the table
+#  and page rendering code can be reused.
+#
+#  Report JSON files live in backend/reports/ — NOT backend/presets/, whose
+#  files are all assumed to be DocumentConfigs by the veggie preset picker.
+# ═════════════════════════════════════════════
+
+class ReportColumn(ColumnConfig):
+    """A ColumnConfig for grouped reports.
+
+    Header matching: `source_header` is compared to the sheet's header
+    after collapsing all whitespace (including line breaks) to single
+    spaces, so write it on one line: the sheet's "สินค้าทั้งหมด \\n( รายการ )"
+    is matched by "สินค้าทั้งหมด ( รายการ )".
+    """
+
+    # If set, the cell value is split on this separator and each piece is
+    # shown on its own line inside the cell. For TMS cells that pack several
+    # items into one string (e.g. the product list joined with " , ").
+    split_on: Optional[str] = None
+
+
+class ReportSection(BaseModel):
+    """One table in each client's report, fed by one sheet of the workbook."""
+
+    key: str                       # stable id, e.g. "delivered"
+    title: str                     # heading printed above this table
+    # Sheet to read, WITHOUT its numeric prefix: the TMS names sheets
+    # "1.กำลังจัดส่ง", "2.จัดส่งสำเร็จ"; write "กำลังจัดส่ง", "จัดส่งสำเร็จ".
+    # The reader strips a leading "<digits>." before comparing.
+    sheet_name: str
+    # Each section has its OWN columns because the TMS sheets share most
+    # headers but not all (e.g. the date column is called "delivered date" on
+    # one sheet and "confirmed-failed date" on another).
+    columns: list[ReportColumn]
+    # Show this section for a client even with zero rows (e.g. "Delivered"
+    # should always appear, "Failed" should only appear when there is a failure).
+    show_when_empty: bool = False
+    # Optional sanity check: if set, rows on this sheet whose status cell
+    # (see GroupedReportConfig.status_header) differs are FLAGGED (never
+    # silently dropped or relabelled).
+    expected_status: Optional[str] = None
+    # Heading colour override (hex), e.g. red for the failed section.
+    title_color: Optional[str] = None
+
+
+class GroupedReportConfig(BaseModel):
+    id: str
+    name: str
+    document_title: str
+    # "{group}" = the group value (e.g. the client), "{total}" = rows across sections
+    intro_text_template: str = "{group} --- {total} order(s)"
+    # Output file name (without .pdf); "{group}" is replaced, then sanitised.
+    filename_template: str = "{group}"
+    orientation: Literal["portrait", "landscape"] = "portrait"
+
+    # --- Excel reading ---
+    header_row: int = 2
+    data_start_row: int = 3
+
+    # Header of the column whose unique values each get their own PDF.
+    group_by_header: str
+    # Rows where the group cell is blank are NOT dropped: they are put in a
+    # report under this label so nothing silently disappears.
+    blank_group_label: str = "(No client specified)"
+    # Header of the per-row delivery-status column, used by expected_status.
+    status_header: Optional[str] = None
+
+    sections: list[ReportSection] = Field(min_length=1)
+    footer_blocks: list[FooterBlock] = Field(default_factory=list)
+    brand: BrandConfig = Field(default_factory=BrandConfig)
+
+    @model_validator(mode="after")
+    def _check_structure(self):
+        keys = [sec.key for sec in self.sections]
+        if len(set(keys)) != len(keys):
+            raise ValueError(f"section keys must be unique, got {keys}")
+        sheets = [sec.sheet_name for sec in self.sections]
+        if len(set(sheets)) != len(sheets):
+            raise ValueError(f"each section needs its own sheet, got {sheets}")
+        for sec in self.sections:
+            ckeys = [c.key for c in sec.columns]
+            if len(set(ckeys)) != len(ckeys):
+                raise ValueError(f"section '{sec.key}': column keys must be unique, got {ckeys}")
+            for c in sec.columns:
+                if c.source != "excel" or c.type != "text" or not c.source_header:
+                    raise ValueError(
+                        f"section '{sec.key}', column '{c.key}': reports only support "
+                        "text columns read from the spreadsheet (type='text', source='excel', "
+                        "with a source_header). Manual, computed and image columns are not "
+                        "available here."
+                    )
+        if any(sec.expected_status for sec in self.sections) and not self.status_header:
+            raise ValueError("expected_status is set on a section but status_header is missing")
+        return self

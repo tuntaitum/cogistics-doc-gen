@@ -15,7 +15,7 @@ import zipfile
 from xml.sax.saxutils import escape as xml_escape
 import openpyxl
 from PIL import Image as PILImage
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib import colors
 from reportlab.lib.units import mm
 from reportlab.lib.colors import HexColor
@@ -72,7 +72,17 @@ def _ensure_fonts_registered():
     _FONTS_REGISTERED = True
 
 
-PAGE_W, PAGE_H = A4
+PAGE_W, PAGE_H = A4   # portrait A4; kept for reference — use page_size(config) for the real size
+
+
+def page_size(config) -> tuple:
+    """(width, height) in points for this config's orientation.
+
+    The ONE place page size is decided. Every function that needs the page
+    dimensions asks here instead of hardcoding A4, so a config can opt into
+    landscape without any per-document-type logic in the engine.
+    """
+    return landscape(A4) if getattr(config, "orientation", "portrait") == "landscape" else A4
 MARGIN = 18 * mm
 THUMB_SIZE = 28 * mm
 PX_PER_EMU = 1 / 9525
@@ -393,17 +403,31 @@ def make_branded_canvas(config: DocumentConfig, assets_dir: str):
             super().save()
 
         def _draw_page(self, total):
-            w, h = A4
+            w, h = page_size(config)
 
             self.setFillColor(colors.white)
             self.rect(0, h - 22 * mm, w, 22 * mm, fill=1, stroke=0)
 
+            # Portrait banner positions are hand-tuned to the A4 portrait width and
+            # must not change. In landscape the same offsets leave the logos
+            # floating inset from the table, so there we anchor each banner to
+            # the table's own edge (the table overhangs the margins by 3.5mm).
+            table_edge = MARGIN - 3.5 * mm
+            is_landscape = getattr(config, "orientation", "portrait") == "landscape"
             if banner_left and os.path.exists(banner_left):
-                self.drawImage(banner_left, -43, h - 22 * mm, width=w / 2,
-                                height=22 * mm, preserveAspectRatio=True, mask="auto")
+                if is_landscape:
+                    self.drawImage(banner_left, table_edge, h - 22 * mm, width=w / 2,
+                                    height=22 * mm, preserveAspectRatio=True, anchor="w", mask="auto")
+                else:
+                    self.drawImage(banner_left, -43, h - 22 * mm, width=w / 2,
+                                    height=22 * mm, preserveAspectRatio=True, mask="auto")
             if banner_right and os.path.exists(banner_right):
-                self.drawImage(banner_right, w * 0.59, h - 22 * mm, width=w / 2,
-                                height=22 * mm, preserveAspectRatio=True, mask="auto")
+                if is_landscape:
+                    self.drawImage(banner_right, w - table_edge - w / 2, h - 22 * mm, width=w / 2,
+                                    height=22 * mm, preserveAspectRatio=True, anchor="e", mask="auto")
+                else:
+                    self.drawImage(banner_right, w * 0.59, h - 22 * mm, width=w / 2,
+                                    height=22 * mm, preserveAspectRatio=True, mask="auto")
             elif not banner_left:
                 self.setFillColor(colors.white)
                 self.setFont(FONT_BOLD, 13)
@@ -436,7 +460,7 @@ def make_branded_canvas(config: DocumentConfig, assets_dir: str):
             Date line beneath it (visually distinct — shorter and smaller
             type — so it doesn't compete with the signature line itself).
             """
-            w, _ = A4
+            w, _ = page_size(config)
             n = len(labels)
             if n == 0:
                 return
@@ -516,7 +540,7 @@ def build_table(items: list[dict], config: DocumentConfig, styles: dict,
             continue
         active_columns.append(c)
 
-    usable_w = PAGE_W - 2 * MARGIN + 7 * mm
+    usable_w = page_size(config)[0] - 2 * MARGIN + 7 * mm
     fixed_total = sum((c.width_mm or 0) * mm for c in active_columns if c.width_mode == "fixed")
     flex_cols = [c for c in active_columns if c.width_mode == "flex"]
     flex_total_weight = sum(c.flex_weight for c in flex_cols) or 1.0
@@ -675,7 +699,7 @@ def generate_pdf(items: list[dict], config: DocumentConfig, output_path: str, as
     bottom_margin = (20 + SIGNATURE_AREA_HEIGHT / mm) * mm if has_signature else 20 * mm
 
     doc = SimpleDocTemplate(
-        output_path, pagesize=A4,
+        output_path, pagesize=page_size(config),
         leftMargin=MARGIN, rightMargin=MARGIN,
         topMargin=30 * mm, bottomMargin=bottom_margin,
         title=config.document_title,

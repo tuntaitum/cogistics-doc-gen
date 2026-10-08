@@ -1,0 +1,280 @@
+{
+  "id": "food_pipeline_daily",
+  "name": "Food Pipeline — Daily Delivery Report",
+  "document_title": "Daily Delivery Report",
+  "intro_text_template": "{group} --- {total} order(s) in this report",
+  "filename_template": "{group} - Daily Delivery Report",
+  "orientation": "landscape",
+  "header_row": 2,
+  "data_start_row": 3,
+  "group_by_header": "ผู้ว่าจ้าง",
+  "blank_group_label": "(No client specified)",
+  "status_header": "สถานะการจัดส่ง",
+  "sections": [
+    {
+      "key": "delivered",
+      "title": "Delivered",
+      "sheet_name": "จัดส่งสำเร็จ",
+      "show_when_empty": true,
+      "expected_status": "จัดส่งเรียบร้อยแล้ว",
+      "columns": [
+        {
+          "key": "note_no",
+          "label": "Delivery Note No.",
+          "type": "text",
+          "source_header": "เลขที่ใบนำส่ง",
+          "width_mm": 30,
+          "emphasis": true
+        },
+        {
+          "key": "dest",
+          "label": "Destination",
+          "type": "text",
+          "source_header": "รายละเอียดการจัดส่ง",
+          "width_mode": "flex",
+          "flex_weight": 1.0
+        },
+        {
+          "key": "products",
+          "label": "Products",
+          "type": "text",
+          "source_header": "รายละเอียดสินค้า",
+          "width_mode": "flex",
+          "flex_weight": 2.6,
+          "split_on": " , "
+        },
+        {
+          "key": "items",
+          "label": "Items",
+          "type": "text",
+          "source_header": "สินค้าทั้งหมด ( รายการ )",
+          "width_mm": 15,
+          "align": "center"
+        },
+        {
+          "key": "pcs",
+          "label": "Qty (pcs)",
+          "type": "text",
+          "source_header": "จำนวนสินค้าทั้งหมด ( Pcs. )",
+          "width_mm": 17,
+          "align": "center"
+        },
+        {
+          "key": "weight",
+          "label": "Weight (kg)",
+          "type": "text",
+          "source_header": "น้ำหนักรวม (kg)",
+          "width_mm": 18,
+          "align": "center"
+        },
+        {
+          "key": "date",
+          "label": "Delivered Date",
+          "type": "text",
+          "source_header": "วันที่จัดส่งสำเร็จ",
+          "width_mm": 24,
+          "align": "center"
+        },
+        {
+          "key": "time",
+          "label": "Time",
+          "type": "text",
+          "source_header": "เวลาที่จัดส่งสำเร็จ",
+          "width_mm": 14,
+          "align": "center"
+        },
+        {
+          "key": "remarks",
+          "label": "Remarks",
+          "type": "text",
+          "source_header": "หมายเหตุ QC",
+          "width_mm": 24,
+          "optional": true
+        }
+      ]
+    },
+    {
+      "key": "in_transit",
+      "title": "In Transit",
+      "sheet_name": "กำลังจัดส่ง",
+      "columns": [
+        {
+          "key": "note_no",
+          "label": "Delivery Note No.",
+          "type": "text",
+          "source_header": "เลขที่ใบนำส่ง",
+          "width_mm": 30,
+          "emphasis": true
+        },
+        {
+          "key": "dest",
+          "label": "Destination",
+          "type": "text",
+          "source_header": "รายละเอียดการจัดส่ง",
+          "width_mode": "flex",
+          "flex_weight": 1.0
+        },
+        {
+          "key": "products",
+          "label": "Products",
+          "type": "text",
+          "source_header": "รายละเอียดสินค้า",
+          "width_mode": "flex",
+          "flex_weight": 2.6,
+          "split_on": " , "
+        },
+        {
+          "key": "items",
+          "label": "Items",
+          "type": "text",
+          "source_header": "สินค้าทั้งหมด ( รายการ )",
+          "width_mm": 15,
+          "align": "center"
+        },
+        {
+          "key": "pcs",
+          "label": "Qty (pcs)",
+          "type": "text",
+          "source_header": "จำนวนสินค้าทั้งหมด ( Pcs. )",
+          "width_mm": 17,
+          "align": "center"
+        },
+        {
+          "key": "weight",
+          "label": "Weight (kg)",
+          "type": "text",
+          "source_header": "น้ำหนักรวม (kg)",
+          "width_mm": 18,
+          "align": "center"
+        },
+        {
+          "key": "date",
+          "label": "Last Update",
+          "type": "text",
+          "source_header": "วันที่อัพเดทสถานะผ่านมือถือ / ระบบ ล่าสุด",
+          "width_mm": 24,
+          "align": "center"
+        },
+        {
+          "key": "time",
+          "label": "Time",
+          "type": "text",
+          "source_header": "เวลาอัพเดตสถานะล่าสุด",
+          "width_mm": 14,
+          "align": "center"
+        },
+        {
+          "key": "eta",
+          "label": "ETA",
+          "type": "text",
+          "source_header": "ประมาณการที่จะถึงผู้รับ (ETA)2",
+          "width_mm": 24,
+          "align": "center",
+          "optional": true
+        }
+      ]
+    },
+    {
+      "key": "failed",
+      "title": "Delivery Failed",
+      "sheet_name": "จัดส่งไม่สำเร็จ",
+      "title_color": "#A32D2D",
+      "columns": [
+        {
+          "key": "note_no",
+          "label": "Delivery Note No.",
+          "type": "text",
+          "source_header": "เลขที่ใบนำส่ง",
+          "width_mm": 30,
+          "emphasis": true
+        },
+        {
+          "key": "dest",
+          "label": "Destination",
+          "type": "text",
+          "source_header": "รายละเอียดการจัดส่ง",
+          "width_mode": "flex",
+          "flex_weight": 1.0
+        },
+        {
+          "key": "products",
+          "label": "Products",
+          "type": "text",
+          "source_header": "รายละเอียดสินค้า",
+          "width_mode": "flex",
+          "flex_weight": 2.6,
+          "split_on": " , "
+        },
+        {
+          "key": "items",
+          "label": "Items",
+          "type": "text",
+          "source_header": "สินค้าทั้งหมด ( รายการ )",
+          "width_mm": 15,
+          "align": "center"
+        },
+        {
+          "key": "pcs",
+          "label": "Qty (pcs)",
+          "type": "text",
+          "source_header": "จำนวนสินค้าทั้งหมด ( Pcs. )",
+          "width_mm": 17,
+          "align": "center"
+        },
+        {
+          "key": "weight",
+          "label": "Weight (kg)",
+          "type": "text",
+          "source_header": "น้ำหนักรวม (kg)",
+          "width_mm": 18,
+          "align": "center"
+        },
+        {
+          "key": "date",
+          "label": "Failed Date",
+          "type": "text",
+          "source_header": "วันที่ยืนยันจัดส่งไม่สำเร็จ",
+          "width_mm": 24,
+          "align": "center"
+        },
+        {
+          "key": "time",
+          "label": "Time",
+          "type": "text",
+          "source_header": "เวลาที่ยืนยันจัดส่งไม่สำเร็จ",
+          "width_mm": 14,
+          "align": "center"
+        },
+        {
+          "key": "cause",
+          "label": "Caused By",
+          "type": "text",
+          "source_header": "ส่งไม่สำเร็จ ปัญหาเกิดจาก",
+          "width_mm": 26,
+          "optional": true
+        },
+        {
+          "key": "problem",
+          "label": "Problem",
+          "type": "text",
+          "source_header": "ปัญหาที่เกิดขึ้น",
+          "width_mode": "flex",
+          "flex_weight": 1.0,
+          "optional": true
+        }
+      ]
+    }
+  ],
+  "footer_blocks": [],
+  "brand": {
+    "company_name": "COGISTICS",
+    "tagline": "The One Stop Cold Chain Solution",
+    "primary": "#1A3C5E",
+    "accent": "#7C7C7C",
+    "light_bg": "#F5F7FA",
+    "text_dark": "#1C1C1C",
+    "text_mid": "#555555",
+    "banner_left": "cogistics header banner left.png",
+    "banner_right": "cogistics header banner right.png"
+  }
+}

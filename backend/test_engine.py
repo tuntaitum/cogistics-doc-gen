@@ -12,7 +12,7 @@ import openpyxl
 from openpyxl.drawing.image import Image as XLImage
 from PIL import Image as PILImage
 
-from schemas import DocumentConfig, ColumnConfig
+from schemas import DocumentConfig, ColumnConfig, GroupedReportConfig
 import engine
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -316,6 +316,67 @@ def test_excel_format_sniffing():
     print("PASS: workbook detected by content; legacy .xls, non-Excel zips and junk rejected")
 
 
+def _page_boxes(pdf_path):
+    """[(width, height), ...] of every page, read straight from the PDF bytes."""
+    data = open(pdf_path, "rb").read().decode("latin-1")
+    return [(round(float(a)), round(float(b)))
+            for a, b in re.findall(r"/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]", data)]
+
+
+def test_landscape_orientation():
+    """The orientation setting changes page size, and ONLY when asked.
+    Existing (portrait) presets must be unaffected."""
+    print("\n=== landscape_orientation ===")
+    xlsx = os.path.join(OUT, "_orient.xlsx")
+    build_quotation_xlsx(xlsx)
+    raw = json.load(open(os.path.join(HERE, "presets", "quotation_sheet.json")))
+
+    for orientation, expected in [(None, (595, 842)), ("portrait", (595, 842)), ("landscape", (842, 595))]:
+        d = dict(raw)
+        if orientation:
+            d["orientation"] = orientation
+        cfg = DocumentConfig(**d)
+        items = engine.read_excel(xlsx, cfg)
+        pdf = os.path.join(OUT, "_orient.pdf")
+        engine.generate_pdf(items, cfg, pdf, ASSETS)
+        boxes = _page_boxes(pdf)
+        assert boxes and all(b == expected for b in boxes), f"orientation={orientation!r}: got {boxes}, wanted {expected}"
+    print("PASS: default and 'portrait' stay A4 portrait; 'landscape' gives A4 landscape")
+
+
+def test_grouped_report_config():
+    """Every shipped report JSON validates, and the schema rejects the mistakes
+    that would otherwise fail confusingly at generation time."""
+    print("\n=== grouped_report_config ===")
+    reports_dir = os.path.join(HERE, "reports")
+    files = sorted(f for f in os.listdir(reports_dir) if f.endswith(".json"))
+    assert files, "no report configs found in backend/reports/"
+    for f in files:
+        raw = json.load(open(os.path.join(reports_dir, f), encoding="utf-8"))
+        cfg = GroupedReportConfig(**raw)
+        assert cfg.id == os.path.splitext(f)[0], f"{f}: id {cfg.id!r} must match the filename"
+
+    good = json.load(open(os.path.join(reports_dir, files[0]), encoding="utf-8"))
+
+    def must_reject(mutate, why):
+        bad = json.loads(json.dumps(good))
+        mutate(bad)
+        try:
+            GroupedReportConfig(**bad)
+        except ValueError:
+            return
+        raise AssertionError(f"schema accepted a bad config: {why}")
+
+    must_reject(lambda c: c["sections"][1].update(key=c["sections"][0]["key"]), "duplicate section keys")
+    must_reject(lambda c: c["sections"][1].update(sheet_name=c["sections"][0]["sheet_name"]), "two sections on one sheet")
+    must_reject(lambda c: c["sections"][0]["columns"][0].update(source="manual"), "manual column in a report")
+    must_reject(lambda c: c["sections"][0]["columns"][0].update(source_header=None), "column with no source_header")
+    must_reject(lambda c: c["sections"][0]["columns"].append(dict(c["sections"][0]["columns"][0])), "duplicate column keys")
+    must_reject(lambda c: c.update(status_header=None), "expected_status without status_header")
+    must_reject(lambda c: c.update(sections=[]), "no sections")
+    print(f"PASS: {len(files)} report config(s) valid; 7 kinds of bad config rejected")
+
+
 if __name__ == "__main__":
     run_case("client_catalog", build_client_catalog_xlsx, "client_catalog.json")
     run_case("quotation_sheet", build_quotation_xlsx, "quotation_sheet.json")
@@ -325,4 +386,6 @@ if __name__ == "__main__":
     test_quotation_manual_subtotal_and_total()
     test_computed_columns_still_work()
     test_excel_format_sniffing()
+    test_landscape_orientation()
+    test_grouped_report_config()
     print("\nAll cases passed.")
