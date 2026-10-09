@@ -522,6 +522,47 @@ def test_grouped_report_errors():
     print("PASS: missing sheet/column -> clear error; optional column -> warning; empty day -> no reports")
 
 
+def test_thumbnail_resolution_and_formats():
+    """Thumbnails are built at THUMB_RENDER_DPI (not wastefully larger), for big JPEGs
+    (reduced-size decode path) and for PNGs / transparent images alike."""
+    print("\n=== thumbnail_resolution ===")
+    from reportlab.lib import colors
+    expected_px = int(engine.THUMB_SIZE / 72 * engine.THUMB_RENDER_DPI)
+    c = colors.lightgrey
+
+    def thumb_px(pil_image, fmt):
+        raw = io.BytesIO(); pil_image.save(raw, fmt); raw.seek(0)
+        # make_thumbnail hands reportlab an in-memory JPEG; intercept it to measure the real pixels
+        real_image = engine.Image
+        engine.Image = lambda fp, **kw: fp
+        try:
+            embedded = PILImage.open(engine.make_thumbnail(raw, c, c, c))
+        finally:
+            engine.Image = real_image
+        return embedded.size
+
+    for label, img, fmt in [
+        ("4000x3000 JPEG", PILImage.new("RGB", (4000, 3000), (200, 80, 80)), "JPEG"),
+        ("800x800 PNG", PILImage.new("RGB", (800, 800), (80, 160, 90)), "PNG"),
+        ("transparent PNG", PILImage.new("RGBA", (500, 400), (0, 0, 255, 90)), "PNG"),
+    ]:
+        assert thumb_px(img, fmt) == (expected_px, expected_px), f"{label}: unexpected thumbnail size"
+    assert engine.THUMB_RENDER_DPI <= 400, "thumbnails above ~400 dpi just waste memory and file size"
+    print(f"PASS: thumbnails are {expected_px}px ({engine.THUMB_RENDER_DPI} dpi) for JPEG, PNG and transparent images")
+
+
+def test_excel_format_from_file():
+    """detect_excel_format_file() agrees with detect_excel_format() but reads from disk."""
+    print("\n=== excel_format_from_file ===")
+    path = os.path.join(OUT, "_fmt.xlsx")
+    wb = openpyxl.Workbook(); wb.active.append(["x"]); wb.save(path)
+    assert engine.detect_excel_format_file(path) == "xlsx"
+    for payload, expected in [(b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1" + b"\0" * 32, "xls"), (b"%PDF-1.7", "unknown"), (b"", "unknown"), (b"PK\x03\x04 not really a zip", "unknown")]:
+        open(path, "wb").write(payload)
+        assert engine.detect_excel_format_file(path) == expected == engine.detect_excel_format(payload), payload[:8]
+    print("PASS: file-based format detection agrees with the in-memory version")
+
+
 if __name__ == "__main__":
     run_case("client_catalog", build_client_catalog_xlsx, "client_catalog.json")
     run_case("quotation_sheet", build_quotation_xlsx, "quotation_sheet.json")
@@ -535,4 +576,6 @@ if __name__ == "__main__":
     test_grouped_report_config()
     test_grouped_report_generation()
     test_grouped_report_errors()
+    test_thumbnail_resolution_and_formats()
+    test_excel_format_from_file()
     print("\nAll cases passed.")

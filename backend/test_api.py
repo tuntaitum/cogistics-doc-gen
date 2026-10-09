@@ -131,18 +131,103 @@ def test_empty_day():
 
 def test_cleanup_removes_old_report_folders():
     print("\n=== cleanup ===")
-    old, fresh, other = (main.OUTPUT_DIR / n for n in (f"report-{uuid.uuid4()}", f"report-{uuid.uuid4()}", "not-a-report"))
-    for d in (old, fresh, other):
+    names = (f"report-{uuid.uuid4()}", f"report-{uuid.uuid4()}", f"report-{uuid.uuid4()}", "not-a-report")
+    old, middle, fresh, other = (main.OUTPUT_DIR / n for n in names)
+    for d in (old, middle, fresh, other):
         d.mkdir()
         (d / "x.pdf").write_bytes(b"%PDF")
-    stale = time.time() - (main.RETENTION_HOURS + 1) * 3600
-    os.utime(old, (stale, stale))
-    os.utime(other, (stale, stale))
+    plain = main.OUTPUT_DIR / "plain.pdf"                       # an ordinary (veggie) output file
+    plain.write_bytes(b"%PDF")
+
+    def age(path, hours):
+        t = time.time() - hours * 3600
+        os.utime(path, (t, t))
+
+    age(old, main.RETENTION_HOURS + 1)
+    age(other, main.RETENTION_HOURS + 1)
+    age(middle, main.REPORT_RETENTION_HOURS + 0.5)              # past the report limit, inside the 6h limit
+    age(plain, main.REPORT_RETENTION_HOURS + 0.5)
     main._cleanup_old_files()
     assert not old.exists(), "stale report folder was not cleaned up"
+    assert not middle.exists(), "report folders must expire after REPORT_RETENTION_HOURS, not the longer 6h"
+    assert plain.exists(), "ordinary output files keep the longer retention"
     assert fresh.exists(), "fresh report folder was wrongly deleted"
     assert other.exists(), "cleanup must only touch report-* folders"
-    print("PASS: stale report folders swept; fresh ones and unrelated folders left alone")
+    print("PASS: report folders expire on their own (shorter) clock; other files and folders untouched")
+
+
+def test_uploads_are_bounded_and_tidy():
+    print("\n=== uploads_bounded_and_tidy ===")
+    def leftovers():
+        return sorted(p.name for p in main.UPLOADS_DIR.iterdir() if p.name != ".gitkeep")
+
+    before = leftovers()
+    # rejected files must not stay on disk
+    r = client.post("/api/upload", files={"file": ("x.xlsx", b"%PDF-1.7 nope")}, data={"header_row": 2})
+    assert r.status_code == 400 and leftovers() == before, "rejected upload left a file behind"
+    r = client.post("/api/upload", files={"file": ("old.xls", b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1" + b"\0" * 64)}, data={"header_row": 2})
+    assert r.status_code == 400 and "old-format" in r.json()["detail"] and leftovers() == before
+
+    # an oversized upload is refused (413) and removed, not loaded whole into memory
+    original = main.MAX_UPLOAD_MB
+    main.MAX_UPLOAD_MB = 1
+    try:
+        r = client.post("/api/upload", files={"file": ("big.xlsx", b"PK\x03\x04" + b"0" * (2 * 1024 * 1024))}, data={"header_row": 2})
+    finally:
+        main.MAX_UPLOAD_MB = original
+    assert r.status_code == 413 and "too large" in r.json()["detail"] and leftovers() == before
+    print("PASS: rejected and oversized uploads are refused and leave nothing on disk")
+
+
+def test_report_upload_deleted_after_use():
+    print("\n=== report_upload_deleted_after_use ===")
+    build_tms_report_xlsx(WORKBOOK, CFG)
+    sid = upload()
+    path = main.UPLOADS_DIR / f"{sid}.xlsx"
+    assert path.exists()
+    assert generate(sid).status_code == 200
+    assert not path.exists(), "the uploaded workbook (every client's data) should be deleted once the reports exist"
+    assert generate(sid).status_code == 400            # and can't be reused
+    # but a FAILED run keeps it, so nothing is lost on an error
+    build_tms_report_xlsx(WORKBOOK, CFG, drop_sheet="failed")
+    sid = upload()
+    assert generate(sid).status_code == 422 and (main.UPLOADS_DIR / f"{sid}.xlsx").exists()
+    print("PASS: workbook deleted after a successful run, kept after a failed one")
+
+
+def test_static_files_revalidate():
+    print("\n=== static_files_revalidate ===")
+    r = client.get("/style.css")
+    assert r.status_code == 200 and r.headers["cache-control"] == "no-cache", r.headers
+    etag = r.headers.get("etag")
+    assert etag, "static files should carry an ETag so revalidation is cheap"
+    r2 = client.get("/style.css", headers={"If-None-Match": etag})
+    assert r2.status_code == 304 and r2.headers["cache-control"] == "no-cache" and not r2.content
+    print("PASS: static files must be revalidated and answer 304 (no body) when unchanged")
+
+
+def test_memory_helpers():
+    print("\n=== memory_helpers ===")
+    import inspect
+    import memory
+    memory.release_memory()                              # must never raise, on any platform
+    # the decorator keeps FastAPI-visible parameters, and releases memory even when the endpoint raises
+    assert "session_id" in inspect.signature(main.generate).parameters
+    calls = []
+    original = memory.release_memory
+    memory.release_memory = lambda: calls.append(1)
+    try:
+        @memory.releases_memory
+        def boom(x):
+            raise ValueError("fail")
+        try:
+            boom(1)
+        except ValueError:
+            pass
+    finally:
+        memory.release_memory = original
+    assert calls == [1], "memory was not released after a failing endpoint"
+    print("PASS: release_memory is safe; decorator keeps signatures and runs on errors too")
 
 
 if __name__ == "__main__":
@@ -151,4 +236,8 @@ if __name__ == "__main__":
     test_bad_requests()
     test_empty_day()
     test_cleanup_removes_old_report_folders()
+    test_uploads_are_bounded_and_tidy()
+    test_report_upload_deleted_after_use()
+    test_static_files_revalidate()
+    test_memory_helpers()
     print("\nAll API cases passed.")

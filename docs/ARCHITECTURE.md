@@ -233,3 +233,41 @@ Interactive API docs (FastAPI generates these automatically, useful for poking e
 - `docs/PROJECT.md` — the original why: background, problem, roadmap.
 - `docs/legacy-*.py` — the old desktop app, kept for reference. The image-extraction logic there is the ancestor of `engine.extract_images_by_row()`.
 - Git log — commit messages on this project are unusually detailed, including *why* a fix was made and what was verified. `git log --oneline` then `git show <hash>` is often faster than re-deriving the reasoning.
+
+
+## Memory, disk and hosting (Railway)
+
+**What went wrong before.** Building a catalog from a photo-heavy workbook needs a lot of
+RAM for a moment (every photo is decoded). Python frees it afterwards, but glibc's
+allocator keeps the freed blocks inside the process, so the process only ever grew
+until a redeploy. In a measured 4-session run of a 40-photo workbook, memory at rest
+climbed 83 → 1,360 MB and never came back. Two things made it worse: thumbnails were built
+at ~850 dpi (8x more pixels than needed; they are now `engine.THUMB_RENDER_DPI`, 300), and
+the live preview re-reads the whole workbook on every change.
+
+**What protects against it now**
+- `memory.release_memory()` runs when each heavy endpoint finishes (`@releases_memory` on
+  `/api/items`, `/api/generate`, `/api/preview`, report generation, and uploads).
+- `make_thumbnail` decodes JPEGs at reduced size (`draft`) and closes the originals.
+- Uploads are streamed to disk and capped (`MAX_UPLOAD_MB`, default 100), never held whole in RAM.
+- A report run deletes the uploaded workbook when it succeeds, and report folders expire after
+  `REPORT_RETENTION_HOURS` (default 2); other working files still follow `RETENTION_HOURS` (6).
+- Static files are served with `Cache-Control: no-cache` (always revalidated; unchanged files
+  answer 304), so a redeploy is never masked by a stale cached stylesheet or script.
+
+**Railway variables to set** (Service > Variables). They fix the same problem at the
+allocator level, so the app stays lean even if someone removes the code above:
+
+    MALLOC_MMAP_THRESHOLD_=131072
+    MALLOC_ARENA_MAX=2
+
+Optional: `MAX_UPLOAD_MB`, `REPORT_RETENTION_HOURS`.
+
+**Do not "fix" memory by switching openpyxl to `read_only=True`.** It would use less RAM,
+but it trusts the sheet's stored dimensions, which Google Sheets / Lark exports get wrong,
+and silently drops real columns (see the note in `detect_headers`).
+
+**Telling RAM from disk on the Railway dashboard.** The *Memory* graph is the running
+process. *Volume* usage is files on a mounted volume (only if DATA_DIR points at one). They
+are billed separately; a redeploy resets memory but not a volume.
+

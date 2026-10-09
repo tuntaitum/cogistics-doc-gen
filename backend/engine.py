@@ -85,6 +85,12 @@ def page_size(config) -> tuple:
     return landscape(A4) if getattr(config, "orientation", "portrait") == "landscape" else A4
 MARGIN = 18 * mm
 THUMB_SIZE = 28 * mm
+# Resolution thumbnails are rendered at. 300 dpi is standard print quality; for a
+# ~28 mm picture that is ~330 px. (They used to be built at ~850 dpi — 8x the
+# pixels, with no visible gain — which made catalog PDFs several times larger and
+# made building them use several times more memory. Raise this if you ever need
+# thumbnails to survive heavy zooming.)
+THUMB_RENDER_DPI = 300
 PX_PER_EMU = 1 / 9525
 SIGNATURE_AREA_HEIGHT = 46 * mm  # reserved space above the footer bar, last page only
 FOOTER_TOP_MM = 12.8             # 12mm background band + 0.8mm accent stripe
@@ -117,6 +123,23 @@ def detect_excel_format(data: bytes) -> str:
         # xl/workbook.xml inside.
         try:
             with zipfile.ZipFile(io.BytesIO(data)) as z:
+                if "xl/workbook.xml" in z.namelist():
+                    return "xlsx"
+        except zipfile.BadZipFile:
+            pass
+    return "unknown"
+
+
+def detect_excel_format_file(path) -> str:
+    """Same as detect_excel_format(), but reads a file on disk: only its first
+    bytes (and, for a zip, its table of contents) are loaded, never the whole file."""
+    with open(path, "rb") as f:
+        head = f.read(len(_OLE_MAGIC))
+    if head.startswith(_OLE_MAGIC):
+        return "xls"
+    if head.startswith(_ZIP_MAGIC):
+        try:
+            with zipfile.ZipFile(path) as z:
                 if "xl/workbook.xml" in z.namelist():
                     return "xlsx"
         except zipfile.BadZipFile:
@@ -500,12 +523,20 @@ def make_thumbnail(image_bytes, c_light_bg, c_accent, c_mid, size=THUMB_SIZE):
         try:
             image_bytes.seek(0)
             pil_img = PILImage.open(image_bytes)
+            px = int(size / 72 * THUMB_RENDER_DPI)     # `size` is in points (72 per inch)
+            if pil_img.format == "JPEG":
+                # A JPEG decoder can decode at 1/2, 1/4 or 1/8 scale. Ask for a
+                # size still at least 2x the thumbnail, so quality is unchanged
+                # but a 12-megapixel photo no longer costs ~36 MB of RAM (and
+                # most of a second) just to be shrunk to a few hundred pixels.
+                pil_img.draft("RGB", (px * 2, px * 2))
             if pil_img.mode in ("RGBA", "P"):
                 pil_img = pil_img.convert("RGB")
-            px = int(size * 11.8)
-            pil_img = pil_img.resize((px, px), PILImage.LANCZOS)
+            resized = pil_img.resize((px, px), PILImage.LANCZOS)
+            pil_img.close()
             compressed = io.BytesIO()
-            pil_img.save(compressed, format="JPEG", quality=95, optimize=True)
+            resized.save(compressed, format="JPEG", quality=95, optimize=True)
+            resized.close()
             compressed.seek(0)
             return Image(compressed, width=size, height=size)
         except Exception:

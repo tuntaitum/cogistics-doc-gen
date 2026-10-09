@@ -32,6 +32,7 @@ from fastapi.responses import FileResponse
 from pydantic import ValidationError
 
 import grouped_report
+from memory import releases_memory
 from schemas import GroupedReportConfig
 
 logger = logging.getLogger("codocuments")
@@ -89,6 +90,7 @@ def make_router(*, reports_dir: Path, uploads_dir: Path, output_dir: Path, asset
 
     # ── generate ─────────────────────────────────────────────────────────
     @router.post("/{report_id}/generate")
+    @releases_memory
     def generate(report_id: str, session_id: str = Form(...)):
         """
         Build one PDF per group (client) from a workbook already uploaded via
@@ -114,6 +116,9 @@ def make_router(*, reports_dir: Path, uploads_dir: Path, output_dir: Path, asset
             shutil.rmtree(out_dir, ignore_errors=True)
             logger.exception("Report generation failed")
             raise HTTPException(500, "Something went wrong while building the reports.")
+
+        # The reports are built, so the uploaded workbook (every client's data) has done its job.
+        xlsx_path.unlink(missing_ok=True)
 
         date_text = result.report_date.strftime("%d-%m-%Y") if result.report_date else None
         summary = {

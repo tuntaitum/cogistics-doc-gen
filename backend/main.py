@@ -44,6 +44,7 @@ from fastapi.staticfiles import StaticFiles
 import engine
 from letters import render_non_gmo
 from report_routes import make_router, RUN_DIR_PREFIX
+from memory import release_memory, releases_memory
 from schemas import DocumentConfig
 
 logger = logging.getLogger("codocuments")
@@ -69,6 +70,11 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 # permanent storage — once someone's downloaded their PDF, the app's job is
 # done. Anything older than this gets deleted by the background sweep below.
 RETENTION_HOURS = 6
+# A report run is downloaded straight away, and its folder holds one PDF per client
+# plus a zip, so it can go sooner than the 6h above.
+REPORT_RETENTION_HOURS = float(os.getenv("REPORT_RETENTION_HOURS", "2"))
+# Reject absurd uploads instead of letting one request exhaust the server's memory.
+MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "100"))
 CLEANUP_INTERVAL_SECONDS = 30 * 60  # sweep twice an hour
 
 
@@ -87,10 +93,11 @@ def _cleanup_old_files():
                 pass  # already removed by a concurrent sweep or the OS
     # A grouped-report run is a FOLDER (PDFs + zip), which the file loop above
     # skips. Remove stale ones, or every run would stay on disk forever.
+    report_cutoff = time.time() - (REPORT_RETENTION_HOURS * 3600)
     for path in OUTPUT_DIR.iterdir():
         if path.is_dir() and path.name.startswith(RUN_DIR_PREFIX):
             try:
-                if path.stat().st_mtime < cutoff:
+                if path.stat().st_mtime < report_cutoff:
                     shutil.rmtree(path, ignore_errors=True)
                     deleted += 1
             except FileNotFoundError:
@@ -154,33 +161,44 @@ async def upload_file(file: UploadFile = File(...), header_row: int = Form(2)):
     found in the given row. The session id is passed back into /generate
     so we don't need to re-upload the file after mapping columns.
     """
-    # Judge the file by its contents, not its name: the TMS export is named
-    # ".xls" but is really an .xlsx inside. See engine.detect_excel_format().
-    data = await file.read()
-    fmt = engine.detect_excel_format(data)
-    if fmt == "xls":
-        raise HTTPException(
-            400,
-            "This is an old-format .xls file, which can't be read. "
-            "Open it in Excel and use Save As > Excel Workbook (.xlsx), then upload that.",
-        )
-    if fmt != "xlsx":
-        raise HTTPException(400, "This doesn't look like an Excel workbook. Please upload an .xlsx file.")
-
+    # The file is streamed to disk in chunks (never held whole in RAM) with a size
+    # cap, then judged by its CONTENTS, not its name: the TMS export is named
+    # ".xls" but is really an .xlsx inside. See engine.detect_excel_format_file().
     session_id = str(uuid.uuid4())
     dest = UPLOADS_DIR / f"{session_id}.xlsx"
-    with open(dest, "wb") as f:
-        f.write(data)
-
+    limit = MAX_UPLOAD_MB * 1024 * 1024
+    stored = False
     try:
-        headers, preview_rows = engine.preview_excel(str(dest), header_row=header_row)
-    except Exception as e:
-        dest.unlink(missing_ok=True)
-        raise HTTPException(400, f"Could not read file: {e}")
+        size = 0
+        with open(dest, "wb") as f:
+            while chunk := await file.read(1024 * 1024):
+                size += len(chunk)
+                if size > limit:
+                    raise HTTPException(413, f"That file is too large (the limit is {MAX_UPLOAD_MB} MB).")
+                f.write(chunk)
 
-    if not headers:
-        dest.unlink(missing_ok=True)
-        raise HTTPException(400, f"No headers found in row {header_row}. Try a different header row.")
+        fmt = engine.detect_excel_format_file(dest)
+        if fmt == "xls":
+            raise HTTPException(
+                400,
+                "This is an old-format .xls file, which can't be read. "
+                "Open it in Excel and use Save As > Excel Workbook (.xlsx), then upload that.",
+            )
+        if fmt != "xlsx":
+            raise HTTPException(400, "This doesn't look like an Excel workbook. Please upload an .xlsx file.")
+
+        try:
+            headers, preview_rows = engine.preview_excel(str(dest), header_row=header_row)
+        except Exception as e:
+            raise HTTPException(400, f"Could not read file: {e}")
+
+        if not headers:
+            raise HTTPException(400, f"No headers found in row {header_row}. Try a different header row.")
+        stored = True
+    finally:
+        if not stored:
+            dest.unlink(missing_ok=True)    # never leave a rejected upload on disk
+        release_memory()
 
     return {
         "session_id": session_id,
@@ -312,6 +330,7 @@ def _parse_manual_data(manual_data_json: Optional[str]) -> dict:
 
 
 @app.post("/api/items")
+@releases_memory
 def get_items(session_id: str = Form(...), config_json: str = Form(...)):
     """
     Returns the matched rows as JSON (not a PDF) — powers the manual-column
@@ -340,6 +359,7 @@ def get_items(session_id: str = Form(...), config_json: str = Form(...)):
 
 
 @app.post("/api/generate")
+@releases_memory
 def generate(session_id: str = Form(...), config_json: str = Form(...), manual_data_json: Optional[str] = Form(None)):
     """
     session_id: from /api/upload
@@ -373,6 +393,7 @@ def generate(session_id: str = Form(...), config_json: str = Form(...), manual_d
 
 
 @app.post("/api/preview")
+@releases_memory
 def preview(
     session_id: str = Form(...),
     config_json: str = Form(...),
@@ -448,5 +469,23 @@ app.include_router(make_router(
     reports_dir=REPORTS_DIR, uploads_dir=UPLOADS_DIR, output_dir=OUTPUT_DIR, assets_dir=ASSETS_DIR,
 ))
 
+
+
+class RevalidatingStaticFiles(StaticFiles):
+    """StaticFiles that makes the browser re-check with the server on every load.
+
+    Without this, browsers may keep using an old style.css/app.js for a while
+    after a redeploy, so a user sees new HTML with old styling (links with no
+    styling at all) or new HTML with old JavaScript. "no-cache" does NOT mean
+    "never cache": the browser still stores the file, but asks first, and the
+    server answers "304 not modified" (no body) when nothing changed.
+    """
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 FRONTEND_DIR = BASE_DIR.parent / "frontend"
-app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
+app.mount("/", RevalidatingStaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")

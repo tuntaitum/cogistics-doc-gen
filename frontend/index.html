@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CoDocuments</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
 
@@ -25,8 +25,15 @@
 </main>
 
 <script>
-// The cards come from services.json — to add a service or move a tool, edit that
-// file; this page doesn't change. Text is set with textContent, never innerHTML.
+// The buttons come from services.json — to add a service or move a tool, edit that
+// file; this page doesn't change. Names and descriptions are set with textContent.
+// The SVG icons below are fixed strings of ours (never data), so innerHTML is safe here.
+const ICONS = {
+  truck: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h11v10H3z"/><path d="M14 10h4l3 3v3h-7z"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg>',
+  leaf: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19c0-8 5-13 14-14 0 9-5 14-13 14"/><path d="M5 19c3-4 6-6 9-8"/></svg>',
+};
+const ARROW = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
+
 (async () => {
   const grid = document.getElementById("service-grid");
   const status = document.getElementById("status");
@@ -38,13 +45,28 @@
       const a = document.createElement("a");
       a.className = "service-card";
       a.href = s.href;
+
+      const icon = document.createElement("span");
+      icon.className = "service-card__icon";
+      icon.setAttribute("aria-hidden", "true");
+      icon.innerHTML = ICONS[s.icon] || "";
+
+      const text = document.createElement("span");
+      text.className = "service-card__text";
       const name = document.createElement("h2");
       name.className = "service-card__name";
       name.textContent = s.name;
       const desc = document.createElement("p");
       desc.className = "service-card__desc";
       desc.textContent = s.description;
-      a.append(name, desc);
+      text.append(name, desc);
+
+      const arrow = document.createElement("span");
+      arrow.className = "service-card__arrow";
+      arrow.setAttribute("aria-hidden", "true");
+      arrow.innerHTML = ARROW;
+
+      a.append(icon, text, arrow);
       grid.appendChild(a);
     }
   } catch (err) {

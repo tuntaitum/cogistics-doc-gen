@@ -288,7 +288,10 @@ def generate_grouped_reports(xlsx_path: str, cfg: GroupedReportConfig,
         raise ReportError(f"Could not open the workbook: {e}")
 
     warnings: list = []
-    by_section = {sec.key: _read_section(wb, sec, cfg, warnings) for sec in cfg.sections}
+    try:
+        by_section = {sec.key: _read_section(wb, sec, cfg, warnings) for sec in cfg.sections}
+    finally:
+        wb.close()      # rows are copied out above; don't hold the parsed workbook while rendering PDFs
     all_rows = [r for rows in by_section.values() for r in rows]
     result = ReportResult(report_date=None, warnings=warnings)
 
