@@ -1,0 +1,355 @@
+diff --git a/docs/ADDING_A_TOOL.md b/docs/ADDING_A_TOOL.md
+new file mode 100644
+index 0000000..1f0320b
+--- /dev/null
++++ b/docs/ADDING_A_TOOL.md
+@@ -0,0 +1,175 @@
++# Adding your own tool to CoDocuments
++
++This guide is for anyone who wants to put a new feature (a form, a report, a document generator) on the CoDocuments web app. It explains how the app is organised, the steps to add a tool, and the rules that keep your tool from affecting everyone else's.
++
++You do not need to understand the whole app. Your tool gets its own page and, if it needs one, its own backend file. The rest of this guide is about staying inside that space.
++
++## How the app is organised
++
++```
++Landing page (index.html)
++  └─ a SERVICE (Food Pipeline, Veggie Solution)            ← listed in services.json
++       └─ a menu of its TOOLS (service.html?id=...)        ← listed in services.json
++            └─ a TOOL = one page + (optionally) one backend file     ← this is you
++```
++
++| Where | What it is | Yours to change? |
++|---|---|---|
++| `frontend/services.json` | The registry: which services and tools exist, and where they link. | **Add your entry.** |
++| `frontend/<your-tool>.html` | Your page. | **Yours.** |
++| `backend/<your_tool>_routes.py` | Your server code. | **Yours.** |
++| `backend/main.py` | Starts the app. | **Add 2 lines** (see step 3). |
++| `frontend/style.css` | The shared look. | Add at the bottom only (see "Style"). |
++| `engine.py`, `schemas.py`, `grouped_report.py`, `report_routes.py`, `memory.py`, `services.js`, `service.html`, `index.html`, `app.js`, `supply-knowledge.html`, `presets/`, `reports/` | Shared by other tools. | **Ask first.** |
++
++Changing a shared file can silently change every other document the app produces.
++
++## Adding a tool in five steps
++
++### 1. Create your page
++
++Copy `docs/templates/tool-template.html` to `frontend/<your-tool>.html` (lower case, hyphens: `non-gmo.html`). Change the three marked places: the title, the Back link, and the API path.
++
++### 2. Add it to the menu
++
++Open `frontend/services.json`, find the service your tool belongs to, and add an entry to its `tools` list:
++
++```json
++{
++  "name": "NON-GMO Letter Form",
++  "description": "Fill in a form to create a NON-GMO guarantee letter.",
++  "icon": "letter",
++  "href": "non-gmo.html"
++}
++```
++
++`icon` is one of `truck`, `leaf`, `sheet`, `letter`, `report`. If it is missing or unknown, `report` is used. The menu builds itself from this file, so there is no HTML to edit.
++
++Your Back link should point to `service.html?id=<service id>`, for example `service.html?id=veggie-solution`.
++
++### 3. Add your server code (only if your page needs a server)
++
++Copy `docs/templates/tool_routes_template.py` to `backend/<your_tool>_routes.py` and replace the example with your own logic.
++
++Then wire it into `backend/main.py` with two lines. **`main.py` already imports a function called `make_router` for reports, so give yours a different name:**
++
++```python
++from your_tool_routes import make_router as make_your_tool_router    # near the other imports
++
++app.include_router(make_your_tool_router())    # next to the existing app.include_router(...) line
++```
++
++The `include_router` line **must stay above** `app.mount("/", ...)` at the bottom of the file. That line serves the web pages and would otherwise swallow your routes.
++
++Use `/api/<your-tool>/...` for your paths so they never clash with anyone else's.
++
++### 4. Run it and click through
++
++```bash
++cd backend
++pip install -r requirements.txt
++uvicorn main:app --reload
++```
++
++Open <http://localhost:8000>, go landing → your service → your tool, and use it. Then do it again with the browser window narrowed to phone width.
++
++### 5. Test, then ask for a review
++
++```bash
++cd backend
++python test_engine.py                      # needs: pip install -r requirements.txt
++pip install -r requirements-dev.txt        # one-time, for the API tests
++python test_api.py
++```
++
++Both must end with "All cases passed" / "All API cases passed". The tests use `pdftotext` (from the poppler package) to read PDFs. Add a `test_<your_tool>.py` that checks your tool does its job and rejects bad input. Then use the checklist at the end of this guide.
++
++## Style: making your page look like the rest
++
++Use `style.css` and nothing else. **Don't add a `<style>` block or inline colours**; they drift from the rest of the app and nobody notices until the palette changes.
++
++**Page skeleton:** header with tagline → `main.wrap` → Back button (`btn btn--ghost back-btn`) → `section.panel` containing `h1.panel__title` and `p.panel__hint`. For a wide table use `main.wrap wrap--wide` and `<body class="page--wide">` so the header lines up. The template already has all of this.
++
++| You need | Use |
++|---|---|
++| A form field | `.field-row` → `label.field-row__label` (+ `.field-row__hint`) + `input.field-row__input`. For **text**, add `field-row__input--wide`; the plain class is a 64px number box. |
++| The main button | `.btn .btn--primary` (one per panel) |
++| A secondary button | `.btn .btn--ghost` |
++| A button that is a link (downloads) | `<a class="btn btn--primary">` |
++| Loading / error / success text | `.status` plus `is-loading`, `is-error` or `is-success` |
++| Result with a download | `.result` + `.result__text` + a primary button |
++| PDF preview | `.preview-frame-wrap` + `.preview-frame-header` + `iframe.preview-frame` |
++| Something to review before sending | `.warning-box` |
++| A table | `.report-table` inside `.report-table-scroll` (scrolls sideways on phones) |
++| Upload a file | `.dropzone`, as in `food-pipeline.html` |
++
++**Colours** are variables, never hex codes: `var(--navy)`, `var(--navy-dark)`, `var(--border)`, `var(--text-dark)`, `var(--text-mid)`, `var(--danger)`, `var(--danger-bg)`, `var(--success)`, `var(--success-bg)`, `var(--warn)`, `var(--warn-bg)`, `var(--radius)`.
++
++**If you really need a new style**, add it at the **bottom** of `style.css` under a comment naming your tool, and prefix every class with your tool's name (`.nongmo-...`). Never edit an existing rule; other pages use them.
++
++**Wording:** English, sentence case ("Create PDF", not "CREATE PDF"). Say what happened and what to do next; for example, "The issue date can't be in the future", not "Invalid input".
++
++**Anything that came from a user or a spreadsheet goes on the page with `textContent`, never `innerHTML`.** A client called `Gamma & Sons <Trading>` has to appear exactly like that, and otherwise one odd name can break your page or inject markup.
++
++## Server rules
++
++**Keep your code in your own file.** Don't add routes, models or helper functions to `main.py`. That file is shared and already long.
++
++**Validate on the server.** The browser's `maxlength` and `required` are conveniences. Define a pydantic model with `Field(min_length=..., max_length=...)`, as in the template, and give `HTTPException` messages in plain language, because they are shown to people as written.
++
++**Prefer stateless.** If your tool can build the result in memory and return it, do that. Nothing is stored, so there is nothing to clean up or to cost money. The NON-GMO letter works this way.
++
++**Files.** Anything you save lives on a Railway volume that is **billed per GB and never cleared by a redeploy**. So:
++
++- Write only under `OUTPUT_DIR` or `UPLOADS_DIR` (both are in `main.py`). Single files there are deleted after 6 hours.
++- If you create a **folder**, its name must start with `report-` or it is never deleted. Otherwise, ask for cleanup to be extended.
++- Never build a path from user input. Use `grouped_report.safe_filename()` for file names and validate ids as UUIDs the way `report_routes.py` does.
++- Delete input files when you have finished with them.
++
++**Uploads.** To accept an Excel file, use the existing `POST /api/upload`. It already streams the file to disk, caps its size, checks that it is really a workbook and refuses everything else. Don't write a second upload endpoint without the same protections.
++
++**Memory.** Railway bills memory, and Python keeps memory it has freed. Put `@releases_memory` (from `memory.py`) under your route decorator on anything that opens images, workbooks or builds large PDFs. Don't keep data in module-level variables between requests. Don't decode full-size photos just to shrink them; copy how `engine.make_thumbnail` does it.
++
++**Don't switch `openpyxl` to `read_only=True`** to save memory. It silently drops columns from Google Sheets and Lark exports; the reason is written in `engine.detect_headers`.
++
++**Thai text.** The standard PDF fonts can't draw Thai. Call `engine._ensure_fonts_registered()` and use `engine.FONT_REGULAR` / `engine.FONT_BOLD`.
++
++**Logging.** Use `logging.getLogger("codocuments")`. Don't log client names, phone numbers or spreadsheet contents.
++
++**There is no login yet.** Anything your tool produces is protected only by an unguessable link. Don't put real client data in code, tests or example files.
++
++## Before you ask for a review
++
++- [ ] My tool appears in the right menu and its Back link returns to that menu.
++- [ ] My page has no `<style>` block, no hex colours, and no `innerHTML` with user data.
++- [ ] Buttons, fields, messages and the preview use the shared classes above.
++- [ ] Errors show in red with a message that tells people what to do.
++- [ ] I tried it at phone width, and the page doesn't scroll sideways.
++- [ ] My server code is in its own file, and my only edit to `main.py` is the import and `include_router` lines.
++- [ ] The server rejects bad input (I tested it) and nothing I save is left behind.
++- [ ] `python test_engine.py` and `python test_api.py` both pass, and I added tests for my tool.
++- [ ] I haven't edited any "Ask first" file, or I've said which and why.
++
++## Worked example: bringing the NON-GMO letter in line
++
++The NON-GMO letter is a good start. It stores nothing, the server checks the date and products, and it opens as its own page. These are the changes that would make it follow the rest of this guide, in the order I'd do them.
++
++**Page (`non-gmo.html`)**
++
++1. **Remove the `<style>` block.** Replace `.letter-field` with `.field-row`, `.letter-preview` with `.preview-frame-wrap` + `.preview-frame` (which also replaces the hardcoded `#ddd` border), and `.letter-product` with `.field-row` rows using `field-row__input--wide`.
++2. **Add the tagline** (`app-header__tagline`) to the header and `back-btn` to the Back link, so it matches every other page.
++3. **One main button.** "Preview PDF" and "Download PDF" are both `btn--primary` and stack at full width. Keep Preview as the primary button and show Download in a `.result` block after a successful preview, as `food-pipeline.html` does.
++4. **Make errors red.** The status line is a plain `.status`. Set `is-loading` / `is-error` / `is-success` from the script, as the template does.
++
++**Server (`main.py`, `letters.py`)**
++
++5. **Move the route and its request model out of `main.py`** into `letters_routes.py`, following the template. Then `main.py` only imports and includes it.
++6. **Add `@releases_memory`** to the route. It's light today, but it costs nothing and protects you if the letter ever gets heavier.
++
++**Later, if needed**
++
++7. The signatory name (`letters.py`, "Ms.Thiaranya Maharn"), the 6-product limit and the product suggestions in `<datalist>` are written into the code. That is fine until someone has to change one. Then they should become settings, so a change doesn't need a code edit.
++
++## Questions
++
++Ask the project owner before changing anything in the "Ask first" list, adding a new library to `requirements.txt`, or doing anything that stores files outside `OUTPUT_DIR` / `UPLOADS_DIR`.
+diff --git a/docs/templates/tool-template.html b/docs/templates/tool-template.html
+new file mode 100644
+index 0000000..110126e
+--- /dev/null
++++ b/docs/templates/tool-template.html
+@@ -0,0 +1,109 @@
++<!DOCTYPE html>
++<html lang="en">
++<head>
++<meta charset="UTF-8">
++<meta name="viewport" content="width=device-width, initial-scale=1.0">
++<!-- 1. Change the title -->
++<title>CoDocuments — YOUR TOOL NAME</title>
++<!-- Use the shared stylesheet. Don't add a <style> block; see docs/ADDING_A_TOOL.md for the classes. -->
++<link rel="stylesheet" href="style.css?v=3">
++</head>
++<body>
++
++<header class="app-header">
++  <div class="app-header__inner">
++    <span class="app-header__mark">CoDocuments</span>
++    <span class="app-header__tagline">Cogistics document generator</span>
++  </div>
++</header>
++
++<main class="wrap">
++
++  <!-- 2. Point Back at your service's menu: service.html?id=<service id from services.json> -->
++  <a class="btn btn--ghost back-btn" href="service.html?id=SERVICE_ID">← SERVICE NAME</a>
++
++  <section class="panel">
++    <h1 class="panel__title">YOUR TOOL NAME</h1>
++    <p class="panel__hint">One sentence telling people what this does and what they need to provide.</p>
++
++    <!-- A form field. Text inputs use field-row__input--wide (the plain class is a narrow number box). -->
++    <div class="field-row">
++      <label for="title-input" class="field-row__label">
++        Title
++        <span class="field-row__hint">Printed at the top of the PDF (up to 90 characters)</span>
++      </label>
++      <input type="text" id="title-input" maxlength="90" class="field-row__input field-row__input--wide" placeholder="e.g. Example">
++    </div>
++
++    <!-- One main action per panel: btn--primary. Secondary actions: btn--ghost. -->
++    <button class="btn btn--primary" id="create-btn">Create PDF</button>
++
++    <!-- Messages: add is-loading / is-error / is-success to this element from your script -->
++    <div class="status" id="status" role="status" aria-live="polite"></div>
++
++    <!-- Preview and result: both shown after a successful run -->
++    <div class="preview-frame-wrap" id="preview-wrap" hidden>
++      <div class="preview-frame-header"><span>Preview</span></div>
++      <iframe class="preview-frame" id="preview" title="PDF preview"></iframe>
++    </div>
++    <div class="result" id="result" hidden>
++      <p class="result__text">Check it over, then download.</p>
++      <a class="btn btn--primary" id="download" href="#" download="example.pdf">Download PDF</a>
++    </div>
++  </section>
++
++</main>
++
++<script>
++// 3. Change the API path to your own (and the file name in the download attribute above).
++const API_PATH = "/api/example-tool/make";
++
++const titleInput = document.getElementById("title-input");
++const createBtn = document.getElementById("create-btn");
++const statusEl = document.getElementById("status");
++const resultEl = document.getElementById("result");
++const previewWrap = document.getElementById("preview-wrap");
++const previewEl = document.getElementById("preview");
++const downloadEl = document.getElementById("download");
++let objectUrl = null;
++
++function setStatus(kind, text) { statusEl.className = "status" + (kind ? " is-" + kind : ""); statusEl.textContent = text; }
++
++// Server errors come back as {detail: "plain-language message"}. Validation errors come back as a
++// list instead, so only show the detail when it is text.
++function errorText(data, fallback) { return data && typeof data.detail === "string" ? data.detail : fallback; }
++
++createBtn.addEventListener("click", async () => {
++  createBtn.disabled = true;
++  resultEl.hidden = true;
++  previewWrap.hidden = true;
++  setStatus("loading", "Creating your PDF…");
++  try {
++    const res = await fetch(API_PATH, {
++      method: "POST",
++      headers: { "Content-Type": "application/json" },
++      body: JSON.stringify({ title: titleInput.value.trim() }),
++    });
++    if (!res.ok) {
++      setStatus("error", errorText(await res.json().catch(() => null), "Please check what you entered and try again."));
++      return;
++    }
++    if (objectUrl) URL.revokeObjectURL(objectUrl);          // free the previous PDF
++    objectUrl = URL.createObjectURL(await res.blob());
++    previewEl.src = objectUrl;
++    downloadEl.href = objectUrl;
++    previewWrap.hidden = false;
++    resultEl.hidden = false;
++    setStatus("", "");
++  } catch (err) {
++    setStatus("error", "Couldn't reach the server. Is the backend running?");
++  } finally {
++    createBtn.disabled = false;
++  }
++});
++
++// Rule: anything that came from a user or a spreadsheet goes on the page with textContent,
++// never innerHTML. A name like "Gamma & Sons <Trading>" must show as typed, not be read as HTML.
++</script>
++</body>
++</html>
+diff --git a/docs/templates/tool_routes_template.py b/docs/templates/tool_routes_template.py
+new file mode 100644
+index 0000000..f9d01f7
+--- /dev/null
++++ b/docs/templates/tool_routes_template.py
+@@ -0,0 +1,53 @@
++"""
++TEMPLATE — copy to backend/<your_tool>_routes.py and rename. See docs/ADDING_A_TOOL.md.
++
++Pattern used by report_routes.py: the feature lives in its OWN module and exposes a
++router. main.py only imports it and includes it; you don't add routes to main.py.
++
++This example is "stateless": it builds a PDF in memory and returns it, storing nothing
++on the server. That is the cheapest, safest pattern (no files to clean up on the
++Railway volume), and the one the NON-GMO letter uses. If your tool must save files,
++read "Files" in the guide first.
++"""
++
++import io
++
++from fastapi import APIRouter
++from fastapi.responses import Response
++from pydantic import BaseModel, Field
++from reportlab.lib.pagesizes import A4
++from reportlab.pdfgen import canvas
++
++from memory import releases_memory   # hands memory back to the OS when the request ends
++
++
++class ExampleRequest(BaseModel):
++    # Validate on the SERVER. The browser's maxlength is a convenience, not a safeguard.
++    title: str = Field(min_length=1, max_length=90)
++
++
++def make_router() -> APIRouter:
++    router = APIRouter(prefix="/api/example-tool", tags=["example-tool"])
++
++    @router.post("/make")
++    @releases_memory                # put this on anything that handles images, workbooks or big PDFs
++    def make(request: ExampleRequest):
++        """Return a one-line PDF. Replace this with your tool's real rendering code."""
++        buffer = io.BytesIO()
++        pdf = canvas.Canvas(buffer, pagesize=A4)
++        # NOTE: this standard font cannot draw Thai. For Thai text, call
++        # engine._ensure_fonts_registered() and use engine.FONT_REGULAR instead.
++        pdf.setFont("Helvetica", 16)
++        pdf.drawString(72, 770, request.title)
++        pdf.save()
++        return Response(
++            content=buffer.getvalue(),
++            media_type="application/pdf",
++            headers={"Content-Disposition": 'inline; filename="example.pdf"'},
++        )
++
++    # To return a PLAIN-LANGUAGE error the user will see on the page:
++    #     from fastapi import HTTPException
++    #     raise HTTPException(422, "The issue date can't be in the future.")
++
++    return router

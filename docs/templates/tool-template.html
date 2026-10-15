@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- 1. Change the title -->
+<title>CoDocuments — YOUR TOOL NAME</title>
+<!-- Use the shared stylesheet. Don't add a <style> block; see docs/ADDING_A_TOOL.md for the classes. -->
+<link rel="stylesheet" href="style.css?v=3">
+</head>
+<body>
+
+<header class="app-header">
+  <div class="app-header__inner">
+    <span class="app-header__mark">CoDocuments</span>
+    <span class="app-header__tagline">Cogistics document generator</span>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- 2. Point Back at your service's menu: service.html?id=<service id from services.json> -->
+  <a class="btn btn--ghost back-btn" href="service.html?id=SERVICE_ID">← SERVICE NAME</a>
+
+  <section class="panel">
+    <h1 class="panel__title">YOUR TOOL NAME</h1>
+    <p class="panel__hint">One sentence telling people what this does and what they need to provide.</p>
+
+    <!-- A form field. Text inputs use field-row__input--wide (the plain class is a narrow number box). -->
+    <div class="field-row">
+      <label for="title-input" class="field-row__label">
+        Title
+        <span class="field-row__hint">Printed at the top of the PDF (up to 90 characters)</span>
+      </label>
+      <input type="text" id="title-input" maxlength="90" class="field-row__input field-row__input--wide" placeholder="e.g. Example">
+    </div>
+
+    <!-- One main action per panel: btn--primary. Secondary actions: btn--ghost. -->
+    <button class="btn btn--primary" id="create-btn">Create PDF</button>
+
+    <!-- Messages: add is-loading / is-error / is-success to this element from your script -->
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+
+    <!-- Preview and result: both shown after a successful run -->
+    <div class="preview-frame-wrap" id="preview-wrap" hidden>
+      <div class="preview-frame-header"><span>Preview</span></div>
+      <iframe class="preview-frame" id="preview" title="PDF preview"></iframe>
+    </div>
+    <div class="result" id="result" hidden>
+      <p class="result__text">Check it over, then download.</p>
+      <a class="btn btn--primary" id="download" href="#" download="example.pdf">Download PDF</a>
+    </div>
+  </section>
+
+</main>
+
+<script>
+// 3. Change the API path to your own (and the file name in the download attribute above).
+const API_PATH = "/api/example-tool/make";
+
+const titleInput = document.getElementById("title-input");
+const createBtn = document.getElementById("create-btn");
+const statusEl = document.getElementById("status");
+const resultEl = document.getElementById("result");
+const previewWrap = document.getElementById("preview-wrap");
+const previewEl = document.getElementById("preview");
+const downloadEl = document.getElementById("download");
+let objectUrl = null;
+
+function setStatus(kind, text) { statusEl.className = "status" + (kind ? " is-" + kind : ""); statusEl.textContent = text; }
+
+// Server errors come back as {detail: "plain-language message"}. Validation errors come back as a
+// list instead, so only show the detail when it is text.
+function errorText(data, fallback) { return data && typeof data.detail === "string" ? data.detail : fallback; }
+
+createBtn.addEventListener("click", async () => {
+  createBtn.disabled = true;
+  resultEl.hidden = true;
+  previewWrap.hidden = true;
+  setStatus("loading", "Creating your PDF…");
+  try {
+    const res = await fetch(API_PATH, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: titleInput.value.trim() }),
+    });
+    if (!res.ok) {
+      setStatus("error", errorText(await res.json().catch(() => null), "Please check what you entered and try again."));
+      return;
+    }
+    if (objectUrl) URL.revokeObjectURL(objectUrl);          // free the previous PDF
+    objectUrl = URL.createObjectURL(await res.blob());
+    previewEl.src = objectUrl;
+    downloadEl.href = objectUrl;
+    previewWrap.hidden = false;
+    resultEl.hidden = false;
+    setStatus("", "");
+  } catch (err) {
+    setStatus("error", "Couldn't reach the server. Is the backend running?");
+  } finally {
+    createBtn.disabled = false;
+  }
+});
+
+// Rule: anything that came from a user or a spreadsheet goes on the page with textContent,
+// never innerHTML. A name like "Gamma & Sons <Trading>" must show as typed, not be read as HTML.
+</script>
+</body>
+</html>
