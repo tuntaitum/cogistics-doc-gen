@@ -156,6 +156,28 @@ def test_cleanup_removes_old_report_folders():
     print("PASS: report folders expire on their own (shorter) clock; other files and folders untouched")
 
 
+def test_cleanup_reports_storage_in_logs():
+    print("\n=== cleanup_logging ===")
+    import logging
+    assert main.logger.getEffectiveLevel() <= logging.INFO and main.logger.handlers, "INFO logs would be dropped"
+    records = []
+    class Grab(logging.Handler):
+        def emit(self, record): records.append(record.getMessage())
+    grab = Grab(); main.logger.addHandler(grab)
+    probe = main.UPLOADS_DIR / "probe.bin"
+    probe.write_bytes(b"0" * 2_000_000)
+    try:
+        files, mb = main._storage_summary()
+        assert files >= 1 and mb >= 2.0, (files, mb)
+        main._cleanup_old_files()
+    finally:
+        main.logger.removeHandler(grab)
+        probe.unlink(missing_ok=True)
+    line = next((m for m in records if m.startswith("Storage:")), None)
+    assert line and "MB in uploads+output" in line and "volume:" in line, records
+    print("PASS: every sweep logs how much is stored (and volume use), and INFO logs are no longer dropped")
+
+
 def test_uploads_are_bounded_and_tidy():
     print("\n=== uploads_bounded_and_tidy ===")
     def leftovers():
@@ -236,6 +258,7 @@ if __name__ == "__main__":
     test_bad_requests()
     test_empty_day()
     test_cleanup_removes_old_report_folders()
+    test_cleanup_reports_storage_in_logs()
     test_uploads_are_bounded_and_tidy()
     test_report_upload_deleted_after_use()
     test_static_files_revalidate()

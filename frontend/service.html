@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CoDocuments</title>
+<link rel="stylesheet" href="style.css?v=3">
+</head>
+<body>
+
+<header class="app-header">
+  <div class="app-header__inner">
+    <span class="app-header__mark">CoDocuments</span>
+    <span class="app-header__tagline">Cogistics document generator</span>
+  </div>
+</header>
+
+<!-- Menu for one service, chosen by ?id=... (e.g. service.html?id=veggie-solution).
+     Its tools come from services.json. -->
+<main class="wrap">
+
+  <a class="btn btn--ghost back-btn" href="index.html">← All services</a>
+
+  <section class="panel">
+    <h1 class="panel__title" id="service-title">&nbsp;</h1>
+    <p class="panel__hint" id="service-desc"></p>
+    <div class="service-grid" id="tool-grid"></div>
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+  </section>
+
+</main>
+
+<script src="services.js?v=3"></script>
+<script>
+(async () => {
+  const status = document.getElementById("status");
+  try {
+    const id = new URLSearchParams(location.search).get("id");
+    const service = (await loadServices()).find((s) => s.id === id);
+    if (!service) throw new Error("unknown service");
+    document.title = `CoDocuments — ${service.name}`;
+    document.getElementById("service-title").textContent = service.name;
+    document.getElementById("service-desc").textContent = "Choose what you'd like to do.";
+    renderCards(document.getElementById("tool-grid"), service.tools);
+  } catch (err) {
+    document.getElementById("service-title").textContent = "Service not found";
+    status.className = "status is-error";
+    status.textContent = "We couldn't find that service. Use “All services” to go back.";
+  }
+})();
+</script>
+</body>
+</html>

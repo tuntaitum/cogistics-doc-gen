@@ -48,6 +48,14 @@ from memory import release_memory, releases_memory
 from schemas import DocumentConfig
 
 logger = logging.getLogger("codocuments")
+# Without this, INFO messages (like the cleanup report below) are silently dropped:
+# an unconfigured logger only shows WARNING and above. Railway shows whatever is printed.
+if not logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(levelname)s [codocuments] %(message)s"))
+    logger.addHandler(_handler)
+logger.setLevel(logging.INFO)
+logger.propagate = False
 
 BASE_DIR = Path(__file__).parent
 PRESETS_DIR = BASE_DIR / "presets"
@@ -78,6 +86,20 @@ MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "100"))
 CLEANUP_INTERVAL_SECONDS = 30 * 60  # sweep twice an hour
 
 
+def _storage_summary() -> tuple[int, float]:
+    """(number of working files, their total size in MB) under uploads/ and output/."""
+    files, size = 0, 0
+    for root in (UPLOADS_DIR, OUTPUT_DIR):
+        for path in root.rglob("*"):
+            try:
+                if path.is_file() and path.name != ".gitkeep":
+                    size += path.stat().st_size
+                    files += 1
+            except FileNotFoundError:
+                pass          # removed while we were counting
+    return files, size / 1e6
+
+
 def _cleanup_old_files():
     cutoff = time.time() - (RETENTION_HOURS * 3600)
     deleted = 0
@@ -102,8 +124,14 @@ def _cleanup_old_files():
                     deleted += 1
             except FileNotFoundError:
                 pass
-    if deleted:
-        logger.info(f"Cleanup: deleted {deleted} file(s)/folder(s) older than {RETENTION_HOURS}h")
+    files, mb = _storage_summary()
+    msg = f"Storage: {files} file(s), {mb:.1f} MB in uploads+output (deleted {deleted} this sweep)"
+    try:
+        disk = shutil.disk_usage(DATA_DIR)
+        msg += f" | volume: {disk.used / 1e6:.0f} MB used of {disk.total / 1e6:.0f} MB"
+    except OSError:
+        pass
+    logger.info(msg)
 
 
 async def _cleanup_loop():

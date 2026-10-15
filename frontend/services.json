@@ -4,15 +4,37 @@
       "id": "food-pipeline",
       "name": "Food Pipeline",
       "description": "Daily delivery reports for each client.",
+      "icon": "truck",
       "href": "food-pipeline.html",
-      "icon": "truck"
+      "tools": [
+        {
+          "name": "Daily Delivery Report",
+          "description": "Upload the TMS export and get one PDF report per client.",
+          "icon": "report",
+          "href": "food-pipeline.html"
+        }
+      ]
     },
     {
       "id": "veggie-solution",
       "name": "Veggie Solution",
       "description": "Product catalogs, quotation sheets and guarantee letters.",
-      "href": "veggie.html",
-      "icon": "leaf"
+      "icon": "leaf",
+      "href": "service.html?id=veggie-solution",
+      "tools": [
+        {
+          "name": "Supply Knowledge Sheet Processing",
+          "description": "Turn a supply knowledge sheet into a client catalog, BU catalog or quotation sheet.",
+          "icon": "sheet",
+          "href": "supply-knowledge.html"
+        },
+        {
+          "name": "NON-GMO Letter Form",
+          "description": "Fill in a form to create a NON-GMO guarantee letter.",
+          "icon": "letter",
+          "href": "non-gmo.html"
+        }
+      ]
     }
   ]
 }
