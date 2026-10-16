@@ -31,7 +31,7 @@
           "key": "dest",
           "label": "Destination",
           "type": "text",
-          "source_header": "รายละเอียดการจัดส่ง",
+          "source_header": "ชื่อผู้รับ",
           "width_mode": "flex",
           "flex_weight": 1.0
         },
@@ -53,7 +53,7 @@
         },
         {
           "key": "items",
-          "label": "Items",
+          "label": "SKU Count",
           "type": "text",
           "source_header": "สินค้าทั้งหมด ( รายการ )",
           "width_mm": 15,
@@ -61,7 +61,7 @@
         },
         {
           "key": "pcs",
-          "label": "Qty (pcs)",
+          "label": "Basket Count",
           "type": "text",
           "source_header": "จำนวนสินค้าทั้งหมด ( Pcs. )",
           "width_mm": 17,
