@@ -68,14 +68,6 @@
           "align": "center"
         },
         {
-          "key": "weight",
-          "label": "Weight (kg)",
-          "type": "text",
-          "source_header": "น้ำหนักรวม (kg)",
-          "width_mm": 18,
-          "align": "center"
-        },
-        {
           "key": "date",
           "label": "Delivered Date",
           "type": "text",
@@ -90,6 +82,14 @@
           "source_header": "เวลาที่จัดส่งสำเร็จ",
           "width_mm": 14,
           "align": "center"
+        },
+        {
+          "key": "driver",
+          "label": "Delivery Driver",
+          "type": "text",
+          "source_header": "ชื่อพนักงานขับรถ",
+          "width_mm": 24,
+          "optional": true
         },
         {
           "key": "remarks",
@@ -140,7 +140,7 @@
         },
         {
           "key": "items",
-          "label": "Items",
+          "label": "SKU Count",
           "type": "text",
           "source_header": "สินค้าทั้งหมด ( รายการ )",
           "width_mm": 15,
@@ -148,18 +148,10 @@
         },
         {
           "key": "pcs",
-          "label": "Qty (pcs)",
+          "label": "Basket Count",
           "type": "text",
           "source_header": "จำนวนสินค้าทั้งหมด ( Pcs. )",
           "width_mm": 17,
-          "align": "center"
-        },
-        {
-          "key": "weight",
-          "label": "Weight (kg)",
-          "type": "text",
-          "source_header": "น้ำหนักรวม (kg)",
-          "width_mm": 18,
           "align": "center"
         },
         {
@@ -185,6 +177,14 @@
           "source_header": "ประมาณการที่จะถึงผู้รับ (ETA)2",
           "width_mm": 24,
           "align": "center",
+          "optional": true
+        },
+        {
+          "key": "driver",
+          "label": "Delivery Driver",
+          "type": "text",
+          "source_header": "ชื่อพนักงานขับรถ",
+          "width_mm": 24,
           "optional": true
         }
       ]
@@ -229,7 +229,7 @@
         },
         {
           "key": "items",
-          "label": "Items",
+          "label": "SKU Count",
           "type": "text",
           "source_header": "สินค้าทั้งหมด ( รายการ )",
           "width_mm": 15,
@@ -237,18 +237,10 @@
         },
         {
           "key": "pcs",
-          "label": "Qty (pcs)",
+          "label": "Basket Count",
           "type": "text",
           "source_header": "จำนวนสินค้าทั้งหมด ( Pcs. )",
           "width_mm": 17,
-          "align": "center"
-        },
-        {
-          "key": "weight",
-          "label": "Weight (kg)",
-          "type": "text",
-          "source_header": "น้ำหนักรวม (kg)",
-          "width_mm": 18,
           "align": "center"
         },
         {
@@ -266,6 +258,14 @@
           "source_header": "เวลาที่ยืนยันจัดส่งไม่สำเร็จ",
           "width_mm": 14,
           "align": "center"
+        },
+        {
+          "key": "driver",
+          "label": "Delivery Driver",
+          "type": "text",
+          "source_header": "ชื่อพนักงานขับรถ",
+          "width_mm": 24,
+          "optional": true
         },
         {
           "key": "cause",
