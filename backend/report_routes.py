@@ -142,8 +142,7 @@ def make_router(*, reports_dir: Path, uploads_dir: Path, output_dir: Path, asset
                 "download_url": f"/api/reports/runs/{run_id}/files/{quote(c.filename)}",
             })
 
-        zip_base = f"{cfg.document_title} - {result.report_date.isoformat()}" if result.report_date else cfg.document_title
-        zip_name = grouped_report.safe_filename(zip_base, set())[:-len(".pdf")] + ".zip"
+        zip_name = grouped_report.zip_filename(cfg, result.report_date, sum(c.total for c in result.clients))
         with zipfile.ZipFile(out_dir / zip_name, "w", zipfile.ZIP_DEFLATED) as z:
             for c in result.clients:
                 z.write(c.path, arcname=c.filename)

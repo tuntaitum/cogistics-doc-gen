@@ -563,6 +563,45 @@ def test_excel_format_from_file():
     print("PASS: file-based format detection agrees with the in-memory version")
 
 
+def test_report_title_placeholders():
+    """Placeholders work in the title, intro and file name alike, and are never printed raw.
+    Regression: {group} and {date} in document_title used to appear literally in the PDF."""
+    print("\n=== report_title_placeholders ===")
+    import shutil, datetime
+    cfg = _load_report_cfg().model_copy(update={
+        "document_title": "Delivery Report & Notes for {group} on {date}",   # '&' in the template itself
+        "intro_text_template": "{total} order(s) <{date_iso}>",               # '<' in the template itself
+    })
+    xlsx, out = os.path.join(OUT, "_tms_title.xlsx"), os.path.join(OUT, "_tms_title_reports")
+    shutil.rmtree(out, ignore_errors=True)
+    build_tms_report_xlsx(xlsx, cfg)
+    res = gr.generate_grouped_reports(xlsx, cfg, out, ASSETS)
+    assert len(res.clients) == 4
+    for cr in res.clients:
+        text = " ".join(_pdf_text(cr.path).split())          # join lines: a long title may wrap
+        assert f"Delivery Report & Notes for {cr.name} on 06-10-2026" in text, f"{cr.name}: title wrong: {text[:140]!r}"
+        assert f"{cr.total} order(s) <2026-10-06>" in text, f"{cr.name}: intro wrong"
+        assert "{" not in text and "}" not in text, f"{cr.name}: an unfilled placeholder is still printed"
+
+    # the zip covers every group, so {group} reads as the all-groups label there
+    d = datetime.date(2026, 10, 6)
+    assert gr.zip_filename(cfg, d, 12) == "Delivery Report & Notes for All clients on 06-10-2026.zip"
+    plain = cfg.model_copy(update={"document_title": "Daily Delivery Report"})      # no placeholders: ISO date is appended
+    assert gr.zip_filename(plain, d, 12) == "Daily Delivery Report - 2026-10-06.zip"
+    assert gr.zip_filename(plain.model_copy(update={"all_groups_label": "Everyone"}).model_copy(update={"document_title": "For {group}"}), d, 1) == "For Everyone - 2026-10-06.zip"
+
+    # a typo in a placeholder fails when the config loads, not when someone generates a report
+    raw = _load_report_cfg().model_dump()
+    for bad_title in ("Report for {client}", "Report on {date}"):
+        bad = dict(raw, document_title=bad_title, report_date_header=None if "{date}" in bad_title else raw["report_date_header"])
+        try:
+            GroupedReportConfig(**bad)
+        except ValueError:
+            continue
+        raise AssertionError(f"schema accepted a bad document_title: {bad_title!r}")
+    print("PASS: title, intro, file name and zip name are filled in; '&' and '<' in templates are safe; typos rejected")
+
+
 if __name__ == "__main__":
     run_case("client_catalog", build_client_catalog_xlsx, "client_catalog.json")
     run_case("quotation_sheet", build_quotation_xlsx, "quotation_sheet.json")
@@ -576,6 +615,7 @@ if __name__ == "__main__":
     test_grouped_report_config()
     test_grouped_report_generation()
     test_grouped_report_errors()
+    test_report_title_placeholders()
     test_thumbnail_resolution_and_formats()
     test_excel_format_from_file()
     print("\nAll cases passed.")

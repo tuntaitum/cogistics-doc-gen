@@ -115,6 +115,26 @@ def safe_filename(text: str, used: set) -> str:
     return candidate + ".pdf"
 
 
+def fill_template(template: str, group: str, total: int, report_date: Optional[date]) -> str:
+    """Fill {group} {total} {date} {date_iso} into any report text (title, intro, file name).
+    Returns PLAIN text. Escape it before putting it into a Paragraph. Only the template is
+    interpreted, never the values, so a client called "{x}" or "A & B" comes through as typed."""
+    return template.format(
+        group=group, total=total,
+        date=report_date.strftime("%d-%m-%Y") if report_date else "",
+        date_iso=report_date.isoformat() if report_date else "",
+    )
+
+
+def zip_filename(cfg: GroupedReportConfig, report_date: Optional[date], total: int) -> str:
+    """Name of the zip holding every group's PDF. {group} reads as cfg.all_groups_label here,
+    since the zip covers all of them. The ISO date is appended unless the title already shows a date."""
+    base = fill_template(cfg.document_title, cfg.all_groups_label, total, report_date)
+    if report_date and "{date" not in cfg.document_title:
+        base += f" - {report_date.isoformat()}"
+    return safe_filename(base, set())[:-len(".pdf")] + ".zip"
+
+
 def _format_item(item: str, col) -> str:
     """One item of a multi-item cell: keep only the wanted "label value" parts."""
     if not col.part_separator:
@@ -222,11 +242,8 @@ def _render_client(group: str, rows_by_section: dict, cfg: GroupedReportConfig,
     styles = engine.make_styles(c_dark, c_mid, c_white, c_primary)
 
     total = sum(len(v) for v in rows_by_section.values())
-    fmt = dict(
-        group=xml_escape(group), total=total,
-        date=report_date.strftime("%d-%m-%Y") if report_date else "",
-        date_iso=report_date.isoformat() if report_date else "",
-    )
+    title_text = fill_template(cfg.document_title, group, total, report_date)
+    intro_text = fill_template(cfg.intro_text_template, group, total, report_date)
 
     has_signature = any(b.type == "signature" for b in cfg.footer_blocks)
     bottom_margin = (20 + engine.SIGNATURE_AREA_HEIGHT / mm) * mm if has_signature else 20 * mm
@@ -234,14 +251,15 @@ def _render_client(group: str, rows_by_section: dict, cfg: GroupedReportConfig,
         out_path, pagesize=engine.page_size(cfg),
         leftMargin=engine.MARGIN, rightMargin=engine.MARGIN,
         topMargin=30 * mm, bottomMargin=bottom_margin,
-        title=f"{cfg.document_title} - {group}", author=brand.company_name, compress=1,
+        title=title_text if "{group}" in cfg.document_title else f"{title_text} - {group}",
+        author=brand.company_name, compress=1,
     )
 
     summary = "   |   ".join(f"{sec.title}: {len(rows_by_section[sec.key])}" for sec in cfg.sections)
     story = [
         Spacer(1, 4 * mm),
-        Paragraph(xml_escape(cfg.document_title), styles["cat_title"]),
-        Paragraph(cfg.intro_text_template.format(**fmt), styles["intro"]),
+        Paragraph(xml_escape(title_text), styles["cat_title"]),
+        Paragraph(xml_escape(intro_text), styles["intro"]),
         Paragraph(xml_escape(summary), styles["intro"]),
     ]
 

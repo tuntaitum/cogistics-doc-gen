@@ -194,7 +194,7 @@ class GroupedReportConfig(BaseModel):
     id: str
     name: str
     document_title: str
-    # Placeholders available in both templates below:
+    # Placeholders available in document_title, intro_text_template and filename_template:
     #   {group}     the group value (e.g. the client's name)
     #   {total}     number of rows for that group, across all sections
     #   {date}      the report date as the TMS writes it, day first: 06-10-2026
@@ -202,6 +202,8 @@ class GroupedReportConfig(BaseModel):
     intro_text_template: str = "{group} --- {total} order(s)"
     # Output file name (without .pdf); placeholders are filled, then it is sanitised.
     filename_template: str = "{group}"
+    # What {group} reads as in names that cover ALL groups, e.g. the zip: "... for All clients on 06-10-2026".
+    all_groups_label: str = "All clients"
     orientation: Literal["portrait", "landscape"] = "portrait"
 
     # --- Excel reading ---
@@ -248,7 +250,7 @@ class GroupedReportConfig(BaseModel):
             for c in sec.columns:
                 if c.keep_labels is not None and not c.part_separator:
                     raise ValueError(f"section '{sec.key}', column '{c.key}': keep_labels needs part_separator")
-        for field_name in ("intro_text_template", "filename_template"):
+        for field_name in ("document_title", "intro_text_template", "filename_template"):
             template = getattr(self, field_name)
             try:
                 template.format(group="x", total=0, date="01-01-2000", date_iso="2000-01-01")

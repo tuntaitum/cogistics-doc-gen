@@ -69,7 +69,8 @@ def test_generate_and_download():
     # zip: one valid PDF per client, names intact (Thai, '&', spaces)
     z = client.get(s["zip_url"])
     assert z.status_code == 200 and z.headers["content-type"] == "application/zip"
-    assert "2026-10-06" in z.headers["content-disposition"]
+    cd = z.headers["content-disposition"]
+    assert "2026-10-06" in cd or "06-10-2026" in cd, cd          # the date, in whichever form the title uses
     with zipfile.ZipFile(io.BytesIO(z.content)) as zf:
         names = sorted(zf.namelist())
         assert names == sorted(c["filename"] for c in s["clients"]), names
