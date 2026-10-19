@@ -80,7 +80,7 @@
           "label": "Timestamp",
           "type": "text",
           "source_header": "เวลาที่จัดส่งสำเร็จ",
-          "width_mm": 20,
+          "width_mm": 21,
           "align": "center"
         },
         {
@@ -167,7 +167,7 @@
           "label": "Timestamp",
           "type": "text",
           "source_header": "เวลาอัพเดตสถานะล่าสุด",
-          "width_mm": 20,
+          "width_mm": 21,
           "align": "center"
         },
         {
@@ -264,7 +264,7 @@
           "label": "Timestamp",
           "type": "text",
           "source_header": "เวลาที่ยืนยันจัดส่งไม่สำเร็จ",
-          "width_mm": 20,
+          "width_mm": 21,
           "align": "center"
         },
         {
