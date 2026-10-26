@@ -10,6 +10,8 @@ backend/output/*
 !backend/output/.gitkeep
 backend/uploads/*
 !backend/uploads/.gitkeep
+# Product master data uploaded from Lark Base (client data; lives on the volume)
+backend/masterdata/
 
 # OS
 .DS_Store

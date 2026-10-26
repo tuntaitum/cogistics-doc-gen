@@ -264,3 +264,36 @@ class GroupedReportConfig(BaseModel):
         if any(sec.expected_status for sec in self.sections) and not self.status_header:
             raise ValueError("expected_status is set on a section but status_header is missing")
         return self
+
+
+# ═════════════════════════════════════════════
+#  3PL STOCK MOVEMENT SUMMARY
+#  One client's daily stock summary PDF, built from the WMS stock ledger
+#  export plus the product master data (see stock_report.py).
+# ═════════════════════════════════════════════
+
+class StockReportConfig(BaseModel):
+    id: str
+    name: str
+    document_title: str = "Daily Stock Movement Summary"
+    # Placeholders in intro_text_template and filename_template:
+    #   {client}    the client chosen by the person (as written in the product master data)
+    #   {date}      the confirmed report date, day first: 06-10-2026
+    #   {date_iso}  the same date year first: 2026-10-06 (sorts correctly in a folder)
+    intro_text_template: str = "{client} — {date}"
+    filename_template: str = "{client} - Daily Stock Movement - {date_iso}"
+    orientation: Literal["portrait", "landscape"] = "landscape"
+    brand: BrandConfig = Field(default_factory=BrandConfig)
+    footer_blocks: list[FooterBlock] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _check_templates(self):
+        for field_name in ("intro_text_template", "filename_template"):
+            template = getattr(self, field_name)
+            try:
+                template.format(client="x", date="01-01-2000", date_iso="2000-01-01")
+            except (KeyError, IndexError, ValueError) as e:
+                raise ValueError(f"{field_name} {template!r} is invalid ({e!r}). "
+                                 "Allowed placeholders: {client} {date} {date_iso}")
+        return self
+

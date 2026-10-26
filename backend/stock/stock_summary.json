@@ -1,0 +1,20 @@
+{
+  "id": "stock_summary",
+  "name": "3PL — Daily Stock Movement Summary",
+  "document_title": "Daily Stock Movement Summary",
+  "intro_text_template": "{client} — {date}",
+  "filename_template": "{client} - Daily Stock Movement - {date_iso}",
+  "orientation": "landscape",
+  "brand": {
+    "company_name": "COGISTICS",
+    "tagline": "The One Stop Cold Chain Solution",
+    "primary": "#1A3C5E",
+    "accent": "#7C7C7C",
+    "light_bg": "#F5F7FA",
+    "text_dark": "#1C1C1C",
+    "text_mid": "#555555",
+    "banner_left": "cogistics header banner left.png",
+    "banner_right": "cogistics header banner right.png"
+  },
+  "footer_blocks": []
+}
