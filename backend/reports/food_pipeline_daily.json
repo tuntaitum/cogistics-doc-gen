@@ -3,6 +3,7 @@
   "name": "Food Pipeline — Daily Delivery Report",
   "document_title": "Daily Delivery Report for {group} on {date}",
   "intro_text_template": "{total} order(s) for {date}",
+  "report_creation_timestamp": "{timestamp}",
   "filename_template": "{group} - Daily Delivery Report - {date_iso}",
   "orientation": "landscape",
   "header_row": 2,
@@ -82,14 +83,6 @@
           "source_header": "เวลาที่จัดส่งสำเร็จ",
           "width_mm": 21,
           "align": "center"
-        },
-        {
-          "key": "driver",
-          "label": "Delivery Driver",
-          "type": "text",
-          "source_header": "ชื่อพนักงานขับรถ",
-          "width_mm": 24,
-          "optional": true
         },
         {
           "key": "remarks",
@@ -180,14 +173,6 @@
           "optional": true
         },
         {
-          "key": "driver",
-          "label": "Delivery Driver",
-          "type": "text",
-          "source_header": "ชื่อพนักงานขับรถ",
-          "width_mm": 24,
-          "optional": true
-        },
-        {
           "key": "remarks",
           "label": "Remarks",
           "type": "text",
@@ -266,14 +251,6 @@
           "source_header": "เวลาที่ยืนยันจัดส่งไม่สำเร็จ",
           "width_mm": 21,
           "align": "center"
-        },
-        {
-          "key": "driver",
-          "label": "Delivery Driver",
-          "type": "text",
-          "source_header": "ชื่อพนักงานขับรถ",
-          "width_mm": 24,
-          "optional": true
         },
         {
           "key": "cause",
