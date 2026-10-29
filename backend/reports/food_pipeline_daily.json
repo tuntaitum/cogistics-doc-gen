@@ -37,6 +37,14 @@
           "flex_weight": 1.0
         },
         {
+          "key": "items",
+          "label": "SKU Count",
+          "type": "text",
+          "source_header": "สินค้าทั้งหมด ( รายการ )",
+          "width_mm": 15,
+          "align": "center"
+        },
+        {
           "key": "products",
           "label": "Products",
           "type": "text",
@@ -51,22 +59,6 @@
             "จำนวน"
           ],
           "show_labels": false
-        },
-        {
-          "key": "items",
-          "label": "SKU Count",
-          "type": "text",
-          "source_header": "สินค้าทั้งหมด ( รายการ )",
-          "width_mm": 15,
-          "align": "center"
-        },
-        {
-          "key": "pcs",
-          "label": "Basket Count",
-          "type": "text",
-          "source_header": "จำนวนสินค้าทั้งหมด ( Pcs. )",
-          "width_mm": 17,
-          "align": "center"
         },
         {
           "key": "date",
@@ -116,6 +108,14 @@
           "flex_weight": 1.0
         },
         {
+          "key": "items",
+          "label": "SKU Count",
+          "type": "text",
+          "source_header": "สินค้าทั้งหมด ( รายการ )",
+          "width_mm": 15,
+          "align": "center"
+        },
+        {
           "key": "products",
           "label": "Products",
           "type": "text",
@@ -130,22 +130,6 @@
             "จำนวน"
           ],
           "show_labels": false
-        },
-        {
-          "key": "items",
-          "label": "SKU Count",
-          "type": "text",
-          "source_header": "สินค้าทั้งหมด ( รายการ )",
-          "width_mm": 15,
-          "align": "center"
-        },
-        {
-          "key": "pcs",
-          "label": "Basket Count",
-          "type": "text",
-          "source_header": "จำนวนสินค้าทั้งหมด ( Pcs. )",
-          "width_mm": 17,
-          "align": "center"
         },
         {
           "key": "date",
@@ -205,6 +189,14 @@
           "flex_weight": 1.0
         },
         {
+          "key": "items",
+          "label": "SKU Count",
+          "type": "text",
+          "source_header": "สินค้าทั้งหมด ( รายการ )",
+          "width_mm": 15,
+          "align": "center"
+        },
+        {
           "key": "products",
           "label": "Products",
           "type": "text",
@@ -219,22 +211,6 @@
             "จำนวน"
           ],
           "show_labels": false
-        },
-        {
-          "key": "items",
-          "label": "SKU Count",
-          "type": "text",
-          "source_header": "สินค้าทั้งหมด ( รายการ )",
-          "width_mm": 15,
-          "align": "center"
-        },
-        {
-          "key": "pcs",
-          "label": "Basket Count",
-          "type": "text",
-          "source_header": "จำนวนสินค้าทั้งหมด ( Pcs. )",
-          "width_mm": 17,
-          "align": "center"
         },
         {
           "key": "date",
