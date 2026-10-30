@@ -22,7 +22,7 @@ import os
 import re
 from collections import Counter
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 from xml.sax.saxutils import escape as xml_escape
 
@@ -123,7 +123,9 @@ def fill_template(template: str, group: str, total: int, report_date: Optional[d
         group=group, total=total,
         date=report_date.strftime("%d-%m-%Y") if report_date else "",
         date_iso=report_date.isoformat() if report_date else "",
-        date_now=date.today().strftime("%d-%m-%Y"),
+        date_now=datetime.now(
+            timezone(timedelta(hours=7))
+        ).strftime("%d-%m-%Y %H:%M:%S (UTC+7)"),
     )
 
 
@@ -245,6 +247,9 @@ def _render_client(group: str, rows_by_section: dict, cfg: GroupedReportConfig,
     total = sum(len(v) for v in rows_by_section.values())
     title_text = fill_template(cfg.document_title, group, total, report_date)
     intro_text = fill_template(cfg.intro_text_template, group, total, report_date)
+    creation_text = fill_template(
+        cfg.report_creation_date_template, group, total, report_date
+    )
 
     has_signature = any(b.type == "signature" for b in cfg.footer_blocks)
     bottom_margin = (20 + engine.SIGNATURE_AREA_HEIGHT / mm) * mm if has_signature else 20 * mm
@@ -261,6 +266,7 @@ def _render_client(group: str, rows_by_section: dict, cfg: GroupedReportConfig,
         Spacer(1, 4 * mm),
         Paragraph(xml_escape(title_text), styles["cat_title"]),
         Paragraph(xml_escape(intro_text), styles["intro"]),
+        Paragraph(xml_escape(creation_text), styles["intro"]),
         Paragraph(xml_escape(summary), styles["intro"]),
     ]
 
