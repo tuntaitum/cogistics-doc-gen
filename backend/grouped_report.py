@@ -123,6 +123,7 @@ def fill_template(template: str, group: str, total: int, report_date: Optional[d
         group=group, total=total,
         date=report_date.strftime("%d-%m-%Y") if report_date else "",
         date_iso=report_date.isoformat() if report_date else "",
+        date_now=date.today().strftime("%d-%m-%Y"),
     )
 
 

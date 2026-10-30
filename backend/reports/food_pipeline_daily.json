@@ -3,7 +3,7 @@
   "name": "Food Pipeline — Daily Delivery Report",
   "document_title": "Daily Delivery Report for {group} on {date}",
   "intro_text_template": "{total} order(s) for {date}",
-  "report_creation_timestamp": "{timestamp}",
+  "report_creation_date_template": "Report generated on {date_now}",
   "filename_template": "{group} - Daily Delivery Report - {date_iso}",
   "orientation": "landscape",
   "header_row": 2,

@@ -200,6 +200,7 @@ class GroupedReportConfig(BaseModel):
     #   {date}      the report date as the TMS writes it, day first: 06-10-2026
     #   {date_iso}  the same date year first: 2026-10-06 (sorts correctly in a folder)
     intro_text_template: str = "{group} --- {total} order(s)"
+    report_creation_date_template: str = "Report generated on {date_now}."
     # Output file name (without .pdf); placeholders are filled, then it is sanitised.
     filename_template: str = "{group}"
     # What {group} reads as in names that cover ALL groups, e.g. the zip: "... for All clients on 06-10-2026".
@@ -257,7 +258,7 @@ class GroupedReportConfig(BaseModel):
             except (KeyError, IndexError, ValueError) as e:
                 raise ValueError(
                     f"{field_name} {template!r} is invalid ({e!r}). "
-                    "Allowed placeholders: {group} {total} {date} {date_iso}"
+                    "Allowed placeholders: {group} {total} {date} {date_iso} {date_now}"
                 )
             if ("{date}" in template or "{date_iso}" in template) and not self.report_date_header:
                 raise ValueError(f"{field_name} uses a date placeholder but report_date_header is not set")
@@ -281,6 +282,7 @@ class StockReportConfig(BaseModel):
     #   {date}      the confirmed report date, day first: 06-10-2026
     #   {date_iso}  the same date year first: 2026-10-06 (sorts correctly in a folder)
     intro_text_template: str = "{client} — {date}"
+    report_creation_date_template: str = "Report generated on {date_now}."
     filename_template: str = "{client} - Daily Stock Movement - {date_iso}"
     orientation: Literal["portrait", "landscape"] = "landscape"
     brand: BrandConfig = Field(default_factory=BrandConfig)
@@ -294,6 +296,6 @@ class StockReportConfig(BaseModel):
                 template.format(client="x", date="01-01-2000", date_iso="2000-01-01")
             except (KeyError, IndexError, ValueError) as e:
                 raise ValueError(f"{field_name} {template!r} is invalid ({e!r}). "
-                                 "Allowed placeholders: {client} {date} {date_iso}")
+                                 "Allowed placeholders: {client} {date} {date_iso} {date_now}")
         return self
 
